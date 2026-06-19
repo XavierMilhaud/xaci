@@ -1,6 +1,5 @@
 # ACI — Actuarial Climate Index (R package)
 
-Related to the Python package [`ACI-Python`](https://github.com/your-org/ACI-Python).  
 Implements the computation of the **Actuarial Climate Index (ACI)** and its six components from gridded climate data (NetCDF ERA5) tide gauge stations (PSMSL).
 
 > Reference: Garrido, Milhaud & Olympio (2026). *The definition of a French actuarial climate index; one more step towards a European index.* ⟨hal-04491982⟩

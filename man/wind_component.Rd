@@ -10,7 +10,7 @@ wind_component(
   mask_path = NULL,
   reference_period,
   area = FALSE,
-  season = FALSE
+  admin_mask = NULL
 )
 }
 \arguments{
@@ -18,16 +18,26 @@ wind_component(
 
 \item{wind_v10_data_path}{Path to the v10 NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file, or \code{NULL}.}
+\item{mask_path}{Path to the country mask NetCDF file, or
+\code{NULL}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
-\item{area}{Logical. Spatial mean. Default \code{FALSE}.}
+\item{area}{Logical. If \code{TRUE} return national spatial
+mean as a named numeric vector. Ignored when \code{admin_mask} is not
+\code{NULL}. Default \code{FALSE}.}
 
-\item{season}{Logical. Seasonal aggregation. Default \code{FALSE}.}
+\item{admin_mask}{Output of \code{build_admin_mask()}, or
+\code{NULL} (default) for national behaviour.}
 }
 \value{
-Standardised wind metric (list or named vector).
+If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+  numeric vector (standardised monthly values).
+  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+  \code{data} [lon x lat x months] and \code{time}.
+  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+  column \code{wind_<unit>} per administrative unit, indexed by
+  month-start dates.
 }
 \description{
 Calculate the wind component of the ACI

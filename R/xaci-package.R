@@ -3,7 +3,6 @@
 
 ## usethis namespace: start
 #' @importFrom utils packageVersion
-#' @importFrom stats quantile
-#' @importFrom stats sd
+#' @importFrom stats quantile sd setNames aggregate
 ## usethis namespace: end
 NULL

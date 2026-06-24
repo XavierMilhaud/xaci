@@ -4,7 +4,7 @@
 #' @name sealevel
 NULL
 
-# Month-fraction → month number mapping (from the Python source)
+# Month-fraction → month number mapping
 .MONTH_MAPPING <- c(
   "0417" = "01", "125"  = "02", "2083" = "03", "2917" = "04",
   "375"  = "05", "4583" = "06", "5417" = "07", "625"  = "08",
@@ -111,7 +111,7 @@ sealevel_standardize_data <- function(df, monthly_means, monthly_std_devs,
                                        study_period) {
   dates      <- as.Date(rownames(df))
   study_mask <- dates >= as.Date(study_period[1]) &
-                dates <  as.Date(study_period[2])
+                dates <=  as.Date(study_period[2])
   df_study   <- df[study_mask, , drop = FALSE]
   months     <- as.integer(format(as.Date(rownames(df_study)), "%m"))
 
@@ -143,20 +143,31 @@ sealevel_process <- function(directory, study_period, reference_period) {
 #'
 #' Downloads PSMSL tide-gauge data for the given country, runs the full
 #' processing pipeline, and returns the regional mean standardised anomaly.
-#' Mirrors \code{SeaLevelComponent} constructor + \code{process()} call inside
-#' \code{ActuarialClimateIndex.calculate_aci}.
 #'
 #' @param country_abbrev   Three-letter country code (e.g. \code{"FRA"}).
 #' @param study_period     Character vector \code{c("start", "end")}.
 #' @param reference_period Character vector \code{c("start", "end")}.
-#' @return A one-column \code{data.frame} named \code{"sealevel"} with
-#'   month-end \code{Date} row names.
+#' @param admin_assignment Output of \code{assign_sealevel_to_admin()}, or
+#'   \code{NULL} (default) for national behaviour.
+#' @return If \code{admin_assignment} is \code{NULL}: a one-column
+#'   \code{data.frame} named \code{"sealevel"} indexed by month-start dates.
+#'   Otherwise: a \code{data.frame} with one column
+#'   \code{sealevel_<unit>} per administrative unit containing coastal
+#'   tide-gauge stations, indexed by month-start dates. Units without stations
+#'   are absent from the result.
 #' @export
-sealevel_component <- function(country_abbrev, study_period, reference_period) {
-  # Download data (calls request_sealevel_data equivalent)
+sealevel_component <- function(country_abbrev, study_period, reference_period,
+                               admin_assignment = NULL) {
   directory <- request_sealevel_data(country_abbrev)
   raw       <- sealevel_process(directory, study_period, reference_period)
-  reduce_sealevel_over_region(raw)
+
+  # --- Country level ---
+  if (is.null(admin_assignment)) {
+    return(reduce_sealevel_over_region(raw))
+  }
+
+  # --- Administrative level specified ---
+  reduce_sealevel_over_region(raw, admin_assignment = admin_assignment)
 }
 
 #' Download PSMSL tide-gauge data for a country
@@ -198,4 +209,89 @@ request_sealevel_data <- function(country_abbrev,
     )
   }
   invisible(dest_dir)
+}
+
+
+#' Assign PSMSL tide-gauge stations to administrative units and compute
+#' coastal factors
+#'
+#' Performs a spatial join between PSMSL station coordinates and administrative
+#' unit polygons, and computes for each unit the fraction of its perimeter
+#' that is coastline. The coastline layer is cropped to the country bounding
+#' box before intersection to speed up computation. All geometries are
+#' projected to \code{crs_metric} before length calculations to ensure
+#' results are in metres.
+#'
+#' @param country_abbrev ISO-3 country code (e.g. \code{"FRA"}).
+#' @param admin_level    Integer. Administrative level. Default \code{1}.
+#' @param crs_metric     Integer. EPSG code of a metric CRS appropriate for
+#'   the country, used for accurate length calculations. Default \code{4326}
+#'   (WGS84, not recommended for production — prefer a local CRS such as
+#'   \code{2154} for France or \code{27700} for the UK).
+#' @return A list with two elements:
+#'   \describe{
+#'     \item{\code{station_ids}}{Named list: keys are administrative unit
+#'       names, values are integer vectors of PSMSL station IDs within that
+#'       unit.}
+#'     \item{\code{factors}}{Named numeric vector: keys are administrative
+#'       unit names, values are the coastal fraction (coastline length /
+#'       total perimeter) in \code{[0, 1]}. Zero for landlocked units.}
+#'   }
+#' @export
+#' @importFrom sf st_as_sf st_join st_intersection st_length st_cast
+#'   st_transform st_crs st_bbox st_crop
+#' @importFrom rnaturalearth ne_states ne_coastline
+assign_sealevel_to_admin <- function(country_abbrev, admin_level = 1,
+                                     crs_metric = 4326) {
+  psmsl <- load_psmsl_data()
+  psmsl <- psmsl[psmsl$country == country_abbrev, ]
+  if (nrow(psmsl) == 0)
+    stop("No PSMSL stations found for country: ", country_abbrev)
+
+  # Administrative polygons
+  admin_sf <- rnaturalearth::ne_states(
+    country     = country_abbrev,
+    returnclass = "sf"
+  )
+  admin_sf <- admin_sf[, c("name", "geometry")]
+
+  # Projection into the metric CRS
+  admin_sf <- sf::st_transform(admin_sf, crs_metric)
+
+  # Worldwide coastline, filtrated on the country bounding box, then projected
+  coastline <- rnaturalearth::ne_coastline(returnclass = "sf")
+  coastline <- sf::st_transform(coastline, crs_metric)
+  coastline <- sf::st_crop(coastline, sf::st_bbox(admin_sf))
+
+  # Spatial joint of stations -> administrative units (in WGS84)
+  stations_sf <- sf::st_as_sf(psmsl, coords = c("lon", "lat"), crs = 4326)
+  stations_sf <- sf::st_transform(stations_sf, crs_metric)
+  joined      <- sf::st_join(stations_sf, admin_sf)
+  station_ids <- split(joined$id, joined$name)
+  station_ids <- station_ids[!sapply(station_ids, is.null)]
+
+  # Coastline factor per administrative unit
+  factors <- sapply(admin_sf$name, function(u) {
+    unit_geom <- admin_sf[admin_sf$name == u, ]
+
+    # Coastal length intersecting this unit
+    coast_clip <- suppressWarnings(sf::st_intersection(coastline, unit_geom))
+    coast_len  <- if (nrow(coast_clip) == 0) {
+      0
+    } else {
+      sum(as.numeric(sf::st_length(coast_clip)))
+    }
+
+    # Total perimeter of the unit
+    perimeter <- sum(as.numeric(
+      sf::st_length(sf::st_cast(unit_geom, "MULTILINESTRING"))
+    ))
+
+    if (perimeter == 0) 0 else min(coast_len / perimeter, 1)
+  })
+
+  list(
+    station_ids = station_ids,
+    factors     = setNames(factors, admin_sf$name)
+  )
 }

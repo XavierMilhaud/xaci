@@ -13,7 +13,10 @@ calculate_aci(
   mask_data_path,
   study_period,
   reference_period,
-  factor = 1
+  granularity = "month",
+  factor = 1/5,
+  admin_level = NULL,
+  crs_metric = 4326
 )
 }
 \arguments{
@@ -42,26 +45,56 @@ download PSMSL tide-gauge data (e.g. \code{"FRA"}).}
 \code{c("YYYY-MM-DD", "YYYY-MM-DD")} defining the climatological
 reference period used for standardisation.}
 
-\item{factor}{Numeric erosion factor applied to the sea-
-level component. Default \code{1}.}
+\item{granularity}{Temporal aggregation level. One of
+\code{"month"} (default), \code{"season"}, \code{"semester"},
+\code{"year"}. Seasons follow meteorological convention: DJF (Dec-Feb),
+MAM (Mar-May), JJA (Jun-Aug), SON (Sep-Nov). December is attributed to
+the following year's winter (e.g. December 2010 -> "2011-DJF").}
+
+\item{factor}{Numeric in \code{[0, 1]}. Weight of the
+sea-level component at the national level, representing the fraction of
+coastal area. Default \code{1/5}. At the administrative unit level,
+this argument is ignored: the coastal fraction is computed automatically
+per unit by \code{assign_sealevel_to_admin()}.}
+
+\item{admin_level}{Integer or \code{NULL}. If \code{NULL}
+(default), returns a single national index. Otherwise computes the ACI
+per administrative unit at the given level (1 = regions, 2 = departments,
+etc.). The sea-level component is automatically excluded (\eqn{\alpha = 0})
+for units without coastal tide-gauge stations.}
+
+\item{crs_metric}{Integer. EPSG code of a metric CRS
+appropriate for the country, used for accurate area and length
+calculations in \code{build_admin_mask()} and
+\code{assign_sealevel_to_admin()}. Only used when \code{admin_level} is
+not \code{NULL}. Default \code{4326} (WGS84, not recommended for
+production — prefer a local CRS such as \code{2154} for France or
+\code{27700} for the UK).}
 }
 \value{
-A \code{data.frame} with columns \code{t90}, \code{t10},
-  \code{precipitation}, \code{drought}, \code{wind}, \code{sealevel}, and
-  \code{ACI}, indexed by month-end dates.
+If \code{admin_level = NULL}: a \code{data.frame} with columns
+  \code{t90}, \code{t10}, \code{precipitation}, \code{drought},
+  \code{wind}, \code{sealevel}, and \code{ACI}, indexed by dates at the
+  chosen granularity.
+  If \code{admin_level} is an integer: a \code{data.frame} with one
+  \code{ACI_<unit>} column per administrative unit, indexed by dates at
+  the chosen granularity.
 }
 \description{
-This is the main entry point of the package.  It instantiates all five
+This is the main entry point of the package. It instantiates all five
 climate components, standardises them over the reference period, and
-combines them into a single monthly ACI time series:
+combines them into a single ACI time series:
 }
 \details{
-\deqn{ACI = \frac{T_{90} - T_{10} + P + D + \alpha \cdot SL + W}{6}}
+\deqn{ACI = \frac{T_{90} - T_{10} + P + D + \alpha \cdot SL + W}{5 + \alpha}}
 
-where \eqn{\alpha} is the erosion \code{factor} (default 1).
+where \eqn{\alpha} is the sea-level erosion \code{factor} (coastal fraction,
+default \code{1/5}). For administrative units without coastal stations,
+\eqn{\alpha = 0} and the denominator becomes \code{5}.
 }
 \examples{
 \dontrun{
+# National ACI, annual granularity
 result <- calculate_aci(
   temperature_data_path   = "data/t2m_1960-2020.nc",
   precipitation_data_path = "data/tp_1960-2020.nc",
@@ -70,8 +103,24 @@ result <- calculate_aci(
   country_abbrev          = "FRA",
   mask_data_path          = "data/mask_france.nc",
   study_period            = c("1980-01-01", "2020-12-31"),
-  reference_period        = c("1961-01-01", "1990-12-31")
+  reference_period        = c("1961-01-01", "1990-12-31"),
+  granularity             = "year",
+  factor                  = 1/5
 )
-head(result)
+
+# ACI by department (admin level 2), using Lambert-93 for France
+result_dept <- calculate_aci(
+  temperature_data_path   = "data/t2m_1960-2020.nc",
+  precipitation_data_path = "data/tp_1960-2020.nc",
+  wind_u10_data_path      = "data/u10_1960-2020.nc",
+  wind_v10_data_path      = "data/v10_1960-2020.nc",
+  country_abbrev          = "FRA",
+  mask_data_path          = "data/mask_france.nc",
+  study_period            = c("1980-01-01", "2020-12-31"),
+  reference_period        = c("1961-01-01", "1990-12-31"),
+  granularity             = "year",
+  admin_level             = 2,
+  crs_metric              = 2154
+)
 }
 }

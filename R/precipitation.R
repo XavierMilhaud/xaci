@@ -7,63 +7,36 @@ NULL
 #' Calculate maximum precipitation over a rolling window
 #'
 #' Computes the rolling \code{window_size}-day sum of precipitation, then
-#' takes the monthly (or seasonal) maximum.
+#' takes the monthly maximum.
 #'
 #' @param dataset     List returned by \code{load_component()} for \code{tp}.
-#' @param var_name    Variable name in \code{dataset} (default \code{"tp"}).
-#' @param window_size Rolling window in days. Default 5.
-#' @param season      Logical. If \code{TRUE} aggregate by season (DJF, MAM,
-#'   JJA, SON) instead of by month. Default \code{FALSE}.
-#' @return A list with \code{data} [lon × lat × periods] and \code{time}.
+#' @param var_name    Variable name in \code{dataset}. Default \code{"tp"}.
+#' @param window_size Rolling window in days. Default \code{5}.
+#' @return A list with \code{data} [lon x lat x months] and \code{time}.
 #' @export
 calculate_maximum_precipitation_over_window <- function(dataset,
-                                                         var_name    = "tp",
-                                                         window_size = 5L,
-                                                         season      = FALSE) {
+                                                        var_name    = "tp",
+                                                        window_size = 5L) {
   rolling <- calculate_rolling_sum(dataset, var_name, window_size)
+  data    <- rolling$data
+  time    <- rolling$time
+  dims    <- dim(data)
+  nl      <- dims[1]; nw <- dims[2]
 
-  data  <- rolling$data
-  time  <- rolling$time
-  dims  <- dim(data)
-  nl    <- dims[1]; nw <- dims[2]; nt <- dims[3]
+  # Toujours agréger au mois
+  key     <- format(time, "%Y-%m")
+  periods <- unique(key)
 
-  if (season) {
-    # Define meteorological seasons (DJF starts in Dec of previous year)
-    season_key <- dplyr::case_when(
-      as.integer(format(time, "%m")) %in% c(12, 1, 2)  ~ paste0(
-        ifelse(as.integer(format(time, "%m")) == 12,
-               as.integer(format(time, "%Y")),
-               as.integer(format(time, "%Y")) - 1L),
-        "-DJF"),
-      as.integer(format(time, "%m")) %in% 3:5  ~ paste0(format(time, "%Y"), "-MAM"),
-      as.integer(format(time, "%m")) %in% 6:8  ~ paste0(format(time, "%Y"), "-JJA"),
-      TRUE                                      ~ paste0(format(time, "%Y"), "-SON")
-    )
-  } else {
-    season_key <- format(time, "%Y-%m")
-  }
-
-  periods <- unique(season_key)
-  out     <- array(NA_real_, c(nl, nw, length(periods)))
-
+  out <- array(NA_real_, c(nl, nw, length(periods)))
   for (k in seq_along(periods)) {
-    idx <- which(season_key == periods[k])
+    idx        <- which(key == periods[k])
     out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2),
-                         max, na.rm = TRUE)
+                        max, na.rm = TRUE)
   }
+  out[out == -Inf] <- NA
 
-  period_dates <- if (season) {
-    # Use first day of each season label
-    as.POSIXct(paste0(sub("-.*", "", periods), "-",
-                      dplyr::case_when(
-                        grepl("DJF", periods) ~ "12",
-                        grepl("MAM", periods) ~ "03",
-                        grepl("JJA", periods) ~ "06",
-                        TRUE                  ~ "09"),
-                      "-01"), format = "%Y-%m-%d", tz = "UTC")
-  } else {
-    as.POSIXct(paste0(periods, "-01"), format = "%Y-%m-%d", tz = "UTC")
-  }
+  period_dates <- as.POSIXct(paste0(periods, "-01"),
+                             format = "%Y-%m-%d", tz = "UTC")
 
   list(data = out, time = period_dates, lon = dataset$lon, lat = dataset$lat)
 }
@@ -74,25 +47,44 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #' rolling 5-day window.
 #'
 #' @param precipitation_data_path Path to the precipitation NetCDF file.
-#' @param mask_path               Path to the country mask NetCDF file, or \code{NULL}.
+#' @param mask_path               Path to the country mask NetCDF file, or
+#'   \code{NULL}.
 #' @param reference_period        Character vector \code{c("start", "end")}.
-#' @param var_name                Variable name in the NetCDF (default \code{"tp"}).
-#' @param window_size             Rolling window in days. Default 5.
-#' @param season                  Logical. Seasonal aggregation. Default \code{FALSE}.
-#' @param area                    Logical. Spatial mean before standardising.
-#'   Default \code{FALSE}.
-#' @return Standardised precipitation metric (list or named vector depending on
-#'   \code{area}).
+#' @param var_name                Variable name in the NetCDF. Default
+#'   \code{"tp"}.
+#' @param window_size             Rolling window in days. Default \code{5}.
+#' @param area                    Logical. If \code{TRUE} return national
+#'   spatial mean as a named numeric vector. Ignored when \code{admin_mask}
+#'   is not \code{NULL}. Default \code{FALSE}.
+#' @param admin_mask              Output of \code{build_admin_mask()}, or
+#'   \code{NULL} (default) for national behaviour.
+#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+#'   numeric vector (standardised monthly values).
+#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+#'   \code{data} [lon x lat x months] and \code{time}.
+#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+#'   column \code{precipitation_<unit>} per administrative unit, indexed by
+#'   month-start dates.
 #' @export
 precipitation_component <- function(precipitation_data_path,
-                                     mask_path        = NULL,
-                                     reference_period,
-                                     var_name         = "tp",
-                                     window_size      = 5L,
-                                     season           = FALSE,
-                                     area             = FALSE) {
-  dataset     <- load_component(precipitation_data_path, var_name, mask_path)
-  period_max  <- calculate_maximum_precipitation_over_window(dataset, var_name,
-                                                              window_size, season)
-  standardize_metric(period_max, reference_period, area)
+                                    mask_path        = NULL,
+                                    reference_period,
+                                    var_name         = "tp",
+                                    window_size      = 5L,
+                                    area             = FALSE,
+                                    admin_mask       = NULL) {
+
+  dataset    <- load_component(precipitation_data_path, var_name, mask_path)
+  period_max <- calculate_maximum_precipitation_over_window(dataset, var_name,
+                                                            window_size)
+
+  # --- Country level ---
+  if (is.null(admin_mask)) {
+    return(standardize_metric(period_max, reference_period, area))
+  }
+
+  # --- Administrative level specified ---
+  standardized <- standardize_metric(period_max, reference_period, area = FALSE)
+  reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
+                                admin_mask = admin_mask)
 }

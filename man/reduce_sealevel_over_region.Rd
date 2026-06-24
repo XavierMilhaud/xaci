@@ -2,18 +2,24 @@
 % Please edit documentation in R/utils.R
 \name{reduce_sealevel_over_region}
 \alias{reduce_sealevel_over_region}
-\title{Reduce sea-level data frame to a single regional mean column}
+\title{Reduce sea-level data to a single column or one column per administrative unit}
 \usage{
-reduce_sealevel_over_region(df)
+reduce_sealevel_over_region(df, admin_assignment = NULL)
 }
 \arguments{
-\item{df}{A \code{data.frame} where each column is a tide-gauge station
-(already standardised) and row names are \code{Date} values.}
+\item{df}{A \code{data.frame} of standardised tide-gauge
+values with \code{"YYYY-MM-01"} row names and one column per station.}
+
+\item{admin_assignment}{Output of \code{assign_sealevel_to_admin()}, or
+\code{NULL} (default) for national mean. Must be a list with elements
+\code{station_ids} (named list of PSMSL IDs per unit) and \code{factors}
+(named numeric vector of coastal fractions per unit).}
 }
 \value{
-A one-column \code{data.frame} named \code{"sealevel"} indexed by
-  month-end dates.
+A \code{data.frame} named \code{"sealevel"} (national) or
+  \code{"sealevel_<unit>"} (per admin unit). Units without coastal stations
+  have \code{NA} values.
 }
 \description{
-Reduce sea-level data frame to a single regional mean column
+Reduce sea-level data to a single column or one column per administrative unit
 }

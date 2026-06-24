@@ -4,19 +4,23 @@
 \alias{reduce_dataarray_to_dataframe}
 \title{Reduce a standardised spatial metric to a data frame}
 \usage{
-reduce_dataarray_to_dataframe(metric, column_name = "value")
+reduce_dataarray_to_dataframe(metric, column_name = "value", admin_mask = NULL)
 }
 \arguments{
-\item{metric}{List with fields \code{data} [lon x lat x time] or numeric
-vector, and \code{time}.}
+\item{metric}{List with fields \code{data} [lon x lat x time] and
+\code{time}.}
 
-\item{column_name}{Character. Name to give the column. Default \code{"value"}.}
+\item{column_name}{Character. Column name prefix. Default \code{"value"}.}
+
+\item{admin_mask}{Output of \code{build_admin_mask()}, or \code{NULL}
+(default) for national mean.}
 }
 \value{
-A \code{data.frame} with one column and \code{Date} row names aligned
-  to month-end.
+A \code{data.frame} with one column per administrative unit (or one
+  column for the national mean), indexed by month-start dates.
 }
 \description{
-Averages over lon/lat and returns a one-column \code{data.frame} with the
-month-end date as row names.
+If \code{admin_mask} is \code{NULL}, averages over all non-NA cells
+(national mean). Otherwise computes a weighted mean
+per administrative unit using surface-fraction weights.
 }

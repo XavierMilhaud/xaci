@@ -7,8 +7,7 @@
 calculate_period_wind_exceedance_frequency(
   u10_dataset,
   v10_dataset,
-  reference_period,
-  season = FALSE
+  reference_period
 )
 }
 \arguments{
@@ -17,8 +16,6 @@ calculate_period_wind_exceedance_frequency(
 \item{v10_dataset}{List for \code{v10}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
-
-\item{season}{Logical. Seasonal aggregation. Default \code{FALSE}.}
 }
 \value{
 A list with \code{data} [lon x lat x periods] and \code{time}.

@@ -7,24 +7,20 @@
 calculate_maximum_precipitation_over_window(
   dataset,
   var_name = "tp",
-  window_size = 5L,
-  season = FALSE
+  window_size = 5L
 )
 }
 \arguments{
 \item{dataset}{List returned by \code{load_component()} for \code{tp}.}
 
-\item{var_name}{Variable name in \code{dataset} (default \code{"tp"}).}
+\item{var_name}{Variable name in \code{dataset}. Default \code{"tp"}.}
 
-\item{window_size}{Rolling window in days. Default 5.}
-
-\item{season}{Logical. If \code{TRUE} aggregate by season (DJF, MAM,
-JJA, SON) instead of by month. Default \code{FALSE}.}
+\item{window_size}{Rolling window in days. Default \code{5}.}
 }
 \value{
-A list with \code{data} [lon × lat × periods] and \code{time}.
+A list with \code{data} [lon x lat x months] and \code{time}.
 }
 \description{
 Computes the rolling \code{window_size}-day sum of precipitation, then
-takes the monthly (or seasonal) maximum.
+takes the monthly maximum.
 }

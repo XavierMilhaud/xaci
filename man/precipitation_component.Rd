@@ -10,29 +10,38 @@ precipitation_component(
   reference_period,
   var_name = "tp",
   window_size = 5L,
-  season = FALSE,
-  area = FALSE
+  area = FALSE,
+  admin_mask = NULL
 )
 }
 \arguments{
 \item{precipitation_data_path}{Path to the precipitation NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file, or \code{NULL}.}
+\item{mask_path}{Path to the country mask NetCDF file, or
+\code{NULL}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
-\item{var_name}{Variable name in the NetCDF (default \code{"tp"}).}
+\item{var_name}{Variable name in the NetCDF. Default
+\code{"tp"}.}
 
-\item{window_size}{Rolling window in days. Default 5.}
+\item{window_size}{Rolling window in days. Default \code{5}.}
 
-\item{season}{Logical. Seasonal aggregation. Default \code{FALSE}.}
+\item{area}{Logical. If \code{TRUE} return national
+spatial mean as a named numeric vector. Ignored when \code{admin_mask}
+is not \code{NULL}. Default \code{FALSE}.}
 
-\item{area}{Logical. Spatial mean before standardising.
-Default \code{FALSE}.}
+\item{admin_mask}{Output of \code{build_admin_mask()}, or
+\code{NULL} (default) for national behaviour.}
 }
 \value{
-Standardised precipitation metric (list or named vector depending on
-  \code{area}).
+If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+  numeric vector (standardised monthly values).
+  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+  \code{data} [lon x lat x months] and \code{time}.
+  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+  column \code{precipitation_<unit>} per administrative unit, indexed by
+  month-start dates.
 }
 \description{
 Computes the standardised anomaly of maximum monthly precipitation over a

@@ -73,7 +73,7 @@ calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
   # Rolling percentile then group by day-of-year percentile
   # For each spatial cell, apply rolling window of size window_size then
   # aggregate by day to get 366 threshold values.
-  doy_ref <- as.integer(format(time_ref, "%j"))
+  day_ref <- as.integer(format(time_ref, "%j"))
 
   thresholds <- array(NA_real_, c(nl, nw, 366))
 
@@ -86,9 +86,9 @@ calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
                                FUN = function(x) quantile(x, probs = n / 100,
                                                            na.rm = TRUE),
                                fill = NA, align = "center")
-      # Percentile of rolled values per doy
+      # Percentile of rolled values per day
       for (d in 1:366) {
-        idx <- which(doy_ref == d)
+        idx <- which(day_ref == d)
         if (length(idx) == 0) next
         thresholds[i, j, d] <- quantile(rolled[idx], probs = n / 100,
                                         na.rm = TRUE)
@@ -115,17 +115,17 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
   daily_ext <- temp_extremum(dataset, extremum, part_of_day)
 
   # Percentile thresholds [lon x lat x 366]
-  thresholds_doy <- calculate_percentiles(dataset, percentile,
+  thresholds_day <- calculate_percentiles(dataset, percentile,
                                           reference_period, part_of_day)
 
-  doy <- as.integer(format(as.Date(daily_ext$time), "%j"))
+  day <- as.integer(format(as.Date(daily_ext$time), "%j"))
   dims <- dim(daily_ext$data)
   nl <- dims[1]; nw <- dims[2]; nt <- dims[3]
 
   # Binary: 1 if crossing threshold, 0 otherwise
   crossing <- array(0L, c(nl, nw, nt))
   for (t in seq_len(nt)) {
-    thresh_t <- thresholds_doy[, , doy[t]]
+    thresh_t <- thresholds_day[, , day[t]]
     diff_t   <- daily_ext$data[, , t] - thresh_t
     if (above_thresholds) {
       crossing[, , t] <- ifelse(diff_t > 0, 1L, 0L)
@@ -145,7 +145,7 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
        lon = dataset$lon, lat = dataset$lat)
 }
 
-#' Calculate the full temperature component of the ACI
+#' Calculate the full temperature component of the ACI in degrees Celsius
 #'
 #' Combines day and night half-day components (equal weighting), then
 #' standardises relative to the reference period.
@@ -156,28 +156,39 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #' @param percentile            Percentile for the threshold (90 or 10).
 #' @param extremum              \code{"max"} (hot) or \code{"min"} (cold).
 #' @param above_thresholds      Logical (see \code{calculate_halfday_component}).
-#' @param area                  Logical. If \code{TRUE} return spatial mean.
-#'   Default \code{FALSE}.
-#' @return If \code{area = TRUE}: a named numeric vector (standardised monthly
-#'   values). Otherwise: a list with \code{data} [lon × lat × months] and
-#'   \code{time}.
+#' @param area                  Logical. If \code{TRUE} return national spatial
+#'   mean as a named numeric vector. Ignored when \code{admin_mask} is not
+#'   \code{NULL}. Default \code{FALSE}.
+#' @param admin_mask            Output of \code{build_admin_mask()}, or
+#'   \code{NULL} (default) for national behaviour.
+#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+#'   numeric vector (standardised monthly values).
+#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+#'   \code{data} [lon x lat x months] and \code{time}.
+#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+#'   column \code{t90_<unit>} (or \code{t10_<unit>}) per administrative unit,
+#'   indexed by month-start dates.
 #' @export
 temperature_component <- function(temperature_data_path, mask_path,
-                                   reference_period,
-                                   percentile      = 90,
-                                   extremum        = "max",
-                                   above_thresholds = TRUE,
-                                   area            = FALSE) {
+                                  reference_period,
+                                  percentile       = 90,
+                                  extremum         = "max",
+                                  above_thresholds = TRUE,
+                                  area             = FALSE,
+                                  admin_mask       = NULL) {
+
   dataset <- load_component(temperature_data_path, "t2m", mask_path)
+  # Conversion Kelvin -> Celsius
+  dataset$data <- dataset$data - 273.15
 
   day_comp   <- calculate_halfday_component(dataset, reference_period, "day",
-                                             extremum, percentile,
-                                             above_thresholds)
+                                            extremum, percentile,
+                                            above_thresholds)
   night_comp <- calculate_halfday_component(dataset, reference_period, "night",
-                                             extremum, percentile,
-                                             above_thresholds)
+                                            extremum, percentile,
+                                            above_thresholds)
 
-  # Average day and night
+  # Mean day/night
   combined <- list(
     data = 0.5 * (day_comp$data + night_comp$data),
     time = day_comp$time,
@@ -185,5 +196,21 @@ temperature_component <- function(temperature_data_path, mask_path,
     lat  = dataset$lat
   )
 
-  standardize_metric(combined, reference_period, area)
+  # Standardization
+  standardized <- standardize_metric(combined, reference_period, area = FALSE)
+
+  # --- Country level ---
+  if (is.null(admin_mask)) {
+    if (area) {
+      # National spatial mean
+      return(standardize_metric(combined, reference_period, area = TRUE))
+    } else {
+      return(standardized)
+    }
+  }
+
+  # --- Administrative level specified ---
+  col_prefix <- if (percentile == 90) "t90" else "t10"
+  reduce_dataarray_to_dataframe(standardized, column_name = col_prefix,
+                                admin_mask = admin_mask)
 }

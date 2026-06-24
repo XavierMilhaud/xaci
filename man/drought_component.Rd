@@ -8,7 +8,8 @@ drought_component(
   precipitation_data_path,
   mask_path = NULL,
   reference_period,
-  area = FALSE
+  area = FALSE,
+  admin_mask = NULL
 )
 }
 \arguments{
@@ -19,10 +20,21 @@ drought_component(
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
-\item{area}{Logical. Spatial mean. Default \code{FALSE}.}
+\item{area}{Logical. If \code{TRUE} return national
+spatial mean as a named numeric vector. Ignored when \code{admin_mask}
+is not \code{NULL}. Default \code{FALSE}.}
+
+\item{admin_mask}{Output of \code{build_admin_mask()}, or
+\code{NULL} (default) for national behaviour.}
 }
 \value{
-Standardised drought metric (list or named vector).
+If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+  numeric vector (standardised monthly values).
+  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+  \code{data} [lon x lat x months] and \code{time}.
+  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+  column \code{drought_<unit>} per administrative unit, indexed by
+  month-start dates.
 }
 \description{
 Computes standardised consecutive dry days.

@@ -85,6 +85,7 @@ resample_daily <- function(dataset, FUN = sum) {
                           na.rm = TRUE)
     }
   }
+  out[out == -Inf] <- NA
   dataset$data <- out
   dataset$time <- as.POSIXct(days, tz = "UTC")
   dataset
@@ -118,6 +119,7 @@ resample_monthly <- function(data, time, FUN = mean) {
     out <- vapply(months, function(m) FUN(data[month_key == m], na.rm = TRUE),
                   numeric(1))
   }
+  out[out == -Inf] <- NA
 
   list(
     data = out,

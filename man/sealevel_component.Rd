@@ -4,7 +4,12 @@
 \alias{sealevel_component}
 \title{Calculate the sea-level component of the ACI}
 \usage{
-sealevel_component(country_abbrev, study_period, reference_period)
+sealevel_component(
+  country_abbrev,
+  study_period,
+  reference_period,
+  admin_assignment = NULL
+)
 }
 \arguments{
 \item{country_abbrev}{Three-letter country code (e.g. \code{"FRA"}).}
@@ -12,14 +17,19 @@ sealevel_component(country_abbrev, study_period, reference_period)
 \item{study_period}{Character vector \code{c("start", "end")}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{admin_assignment}{Output of \code{assign_sealevel_to_admin()}, or
+\code{NULL} (default) for national behaviour.}
 }
 \value{
-A one-column \code{data.frame} named \code{"sealevel"} with
-  month-end \code{Date} row names.
+If \code{admin_assignment} is \code{NULL}: a one-column
+  \code{data.frame} named \code{"sealevel"} indexed by month-start dates.
+  Otherwise: a \code{data.frame} with one column
+  \code{sealevel_<unit>} per administrative unit containing coastal
+  tide-gauge stations, indexed by month-start dates. Units without stations
+  are absent from the result.
 }
 \description{
 Downloads PSMSL tide-gauge data for the given country, runs the full
 processing pipeline, and returns the regional mean standardised anomaly.
-Mirrors \code{SeaLevelComponent} constructor + \code{process()} call inside
-\code{ActuarialClimateIndex.calculate_aci}.
 }

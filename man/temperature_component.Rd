@@ -2,7 +2,7 @@
 % Please edit documentation in R/temperature.R
 \name{temperature_component}
 \alias{temperature_component}
-\title{Calculate the full temperature component of the ACI}
+\title{Calculate the full temperature component of the ACI in degrees Celsius}
 \usage{
 temperature_component(
   temperature_data_path,
@@ -11,7 +11,8 @@ temperature_component(
   percentile = 90,
   extremum = "max",
   above_thresholds = TRUE,
-  area = FALSE
+  area = FALSE,
+  admin_mask = NULL
 )
 }
 \arguments{
@@ -27,13 +28,21 @@ temperature_component(
 
 \item{above_thresholds}{Logical (see \code{calculate_halfday_component}).}
 
-\item{area}{Logical. If \code{TRUE} return spatial mean.
-Default \code{FALSE}.}
+\item{area}{Logical. If \code{TRUE} return national spatial
+mean as a named numeric vector. Ignored when \code{admin_mask} is not
+\code{NULL}. Default \code{FALSE}.}
+
+\item{admin_mask}{Output of \code{build_admin_mask()}, or
+\code{NULL} (default) for national behaviour.}
 }
 \value{
-If \code{area = TRUE}: a named numeric vector (standardised monthly
-  values). Otherwise: a list with \code{data} [lon × lat × months] and
-  \code{time}.
+If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+  numeric vector (standardised monthly values).
+  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+  \code{data} [lon x lat x months] and \code{time}.
+  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+  column \code{t90_<unit>} (or \code{t10_<unit>}) per administrative unit,
+  indexed by month-start dates.
 }
 \description{
 Combines day and night half-day components (equal weighting), then

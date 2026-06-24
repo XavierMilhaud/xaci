@@ -76,7 +76,8 @@ drought_interpolate <- function(cdd_annual) {
   dims  <- dim(data)
   nl    <- dims[1]; nw <- dims[2]; ny <- dims[3]
 
-  monthly_times <- c()
+  #monthly_times <- c()
+  monthly_times <- as.POSIXct(character(), tz = "UTC")
   monthly_list  <- list()
 
   for (k in seq_len(ny - 1L)) {
@@ -95,8 +96,8 @@ drought_interpolate <- function(cdd_annual) {
   for (m in 1:12) {
     monthly_list[[length(monthly_list) + 1L]] <- data[, , ny]
     monthly_times <- c(monthly_times,
-                       as.POSIXct(sprintf("%d-%02d-01", years[ny], m),
-                                  format = "%Y-%m-%d", tz = "UTC"))
+                       as.character(as.POSIXct(sprintf("%d-%02d-01", years[ny], m),
+                                  format = "%Y-%m-%d", tz = "UTC")))
   }
 
   # Stack into [lon x lat x months]
@@ -117,15 +118,36 @@ drought_interpolate <- function(cdd_annual) {
 #' @param mask_path               Path to the country mask NetCDF file, or
 #'   \code{NULL}.
 #' @param reference_period        Character vector \code{c("start", "end")}.
-#' @param area                    Logical. Spatial mean. Default \code{FALSE}.
-#' @return Standardised drought metric (list or named vector).
+#' @param area                    Logical. If \code{TRUE} return national
+#'   spatial mean as a named numeric vector. Ignored when \code{admin_mask}
+#'   is not \code{NULL}. Default \code{FALSE}.
+#' @param admin_mask              Output of \code{build_admin_mask()}, or
+#'   \code{NULL} (default) for national behaviour.
+#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
+#'   numeric vector (standardised monthly values).
+#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
+#'   \code{data} [lon x lat x months] and \code{time}.
+#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
+#'   column \code{drought_<unit>} per administrative unit, indexed by
+#'   month-start dates.
 #' @export
 drought_component <- function(precipitation_data_path,
-                               mask_path        = NULL,
-                               reference_period,
-                               area             = FALSE) {
+                              mask_path        = NULL,
+                              reference_period,
+                              area             = FALSE,
+                              admin_mask       = NULL) {
+
   dataset     <- load_component(precipitation_data_path, "tp", mask_path)
   cdd_annual  <- max_consecutive_dry_days(dataset)
   cdd_monthly <- drought_interpolate(cdd_annual)
-  standardize_metric(cdd_monthly, reference_period, area)
+
+  # --- Country level ---
+  if (is.null(admin_mask)) {
+    return(standardize_metric(cdd_monthly, reference_period, area))
+  }
+
+  # --- Administrative level specified ---
+  standardized <- standardize_metric(cdd_monthly, reference_period, area = FALSE)
+  reduce_dataarray_to_dataframe(standardized, column_name = "drought",
+                                admin_mask = admin_mask)
 }

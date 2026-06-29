@@ -4,13 +4,12 @@
 \alias{resample_monthly}
 \title{Resample a 3-D or 1-D climate series to monthly resolution}
 \usage{
-resample_monthly(data, time, FUN = mean)
+resample_monthly(dataset, FUN = mean)
 }
 \arguments{
-\item{data}{Either a 3-D array \code{[lon × lat × time]} or a numeric
-vector of length \emph{T}.}
-
-\item{time}{POSIXct vector of length \emph{T}.}
+\item{dataset}{List returned by \code{load_component()} or any component
+function, with fields \code{data} (3-D array \code{[lon x lat x time]}
+or numeric vector) and \code{time} (POSIXct vector).}
 
 \item{FUN}{Aggregation function. Default \code{mean}.}
 }

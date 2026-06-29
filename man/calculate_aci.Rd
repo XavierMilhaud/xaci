@@ -5,38 +5,34 @@
 \title{Calculate the Actuarial Climate Index}
 \usage{
 calculate_aci(
-  temperature_data_path,
-  precipitation_data_path,
-  wind_u10_data_path,
-  wind_v10_data_path,
   country_abbrev,
-  mask_data_path,
   study_period,
   reference_period,
+  years = NULL,
+  temperature_data_path = NULL,
+  precipitation_data_path = NULL,
+  wind_u10_data_path = NULL,
+  wind_v10_data_path = NULL,
+  mask_data_path = NULL,
+  sealevel_dir = NULL,
+  percentile_high = 90,
+  percentile_low = 10,
   granularity = "month",
+  area = TRUE,
   factor = 1/5,
+  max_dist_km = 500,
   admin_level = NULL,
-  crs_metric = 4326
+  crs_metric = 4326,
+  save = FALSE,
+  save_dir = paste0("results/", country_abbrev),
+  load_dir = paste0("results/", country_abbrev),
+  computed_components = FALSE
 )
 }
 \arguments{
-\item{temperature_data_path}{Path to the hourly 2-m temperature NetCDF
-(\code{t2m} variable).}
-
-\item{precipitation_data_path}{Path to the hourly/daily precipitation NetCDF
-(\code{tp} variable).}
-
-\item{wind_u10_data_path}{Path to the u-component of 10-m wind NetCDF
-(\code{u10} variable).}
-
-\item{wind_v10_data_path}{Path to the v-component of 10-m wind NetCDF
-(\code{v10} variable).}
-
-\item{country_abbrev}{Three-letter ISO country code used to
-download PSMSL tide-gauge data (e.g. \code{"FRA"}).}
-
-\item{mask_data_path}{Path to the country mask NetCDF file
-(\code{country} variable, values in [0, 1]).}
+\item{country_abbrev}{Three-letter ISO 3166-1 alpha-3 country code
+(e.g. \code{"FRA"}). Used to build default file paths and to download
+PSMSL tide-gauge data.}
 
 \item{study_period}{Character vector of length 2:
 \code{c("YYYY-MM-DD", "YYYY-MM-DD")} defining the study window.}
@@ -45,17 +41,64 @@ download PSMSL tide-gauge data (e.g. \code{"FRA"}).}
 \code{c("YYYY-MM-DD", "YYYY-MM-DD")} defining the climatological
 reference period used for standardisation.}
 
+\item{years}{Integer vector of years covered by the NetCDF files
+(e.g. \code{2011:2015}). Used to build default file paths when any
+\code{*_data_path} argument is \code{NULL}. Not needed if all paths
+are supplied explicitly.}
+
+\item{temperature_data_path}{Path to the hourly 2-m temperature NetCDF
+(\code{t2m} variable). If \code{NULL} (default), built automatically
+from \code{country_abbrev} and \code{years}.}
+
+\item{precipitation_data_path}{Path to the precipitation NetCDF
+(\code{tp} variable). If \code{NULL}, built automatically.}
+
+\item{wind_u10_data_path}{Path to the u-component wind NetCDF
+(\code{u10} variable). If \code{NULL}, built automatically.}
+
+\item{wind_v10_data_path}{Path to the v-component wind NetCDF
+(\code{v10} variable). If \code{NULL}, built automatically.}
+
+\item{mask_data_path}{Path to the country mask NetCDF
+(\code{country} variable). If \code{NULL}, built automatically.}
+
+\item{sealevel_dir}{Character or \code{NULL}. Path to a directory of
+already-downloaded PSMSL \code{.txt} files. If \code{NULL} (default),
+data are downloaded automatically to \code{"data/psmsl/<country_abbrev>"}.}
+
+\item{percentile_high}{Numeric. Upper percentile used for the hot temperature
+component. Default \code{90}. The corresponding column in the output will
+be named \code{t<percentile_high>} (e.g. \code{t90}).}
+
+\item{percentile_low}{Numeric. Lower percentile used for the cold temperature
+component. Default \code{10}. The corresponding column in the output will
+be named \code{t<percentile_low>} (e.g. \code{t10}).}
+
 \item{granularity}{Temporal aggregation level. One of
 \code{"month"} (default), \code{"season"}, \code{"semester"},
 \code{"year"}. Seasons follow meteorological convention: DJF (Dec-Feb),
 MAM (Mar-May), JJA (Jun-Aug), SON (Sep-Nov). December is attributed to
 the following year's winter (e.g. December 2010 -> "2011-DJF").}
 
+\item{area}{Logical. Only used when \code{admin_level = NULL}. If
+\code{TRUE} (default), returns a national scalar time series (spatial
+mean over the country). If \code{FALSE}, returns the full grid-cell-level
+ACI and all components as arrays \code{[lon x lat x time]}, suitable
+for mapping or custom aggregation.
+Ignored when \code{admin_level} is not \code{NULL}.}
+
 \item{factor}{Numeric in \code{[0, 1]}. Weight of the
 sea-level component at the national level, representing the fraction of
 coastal area. Default \code{1/5}. At the administrative unit level,
 this argument is ignored: the coastal fraction is computed automatically
-per unit by \code{assign_sealevel_to_admin()}.}
+per unit by \code{assign_sealevel_to_admin()}. At grid-cell level,
+\eqn{\alpha} is set to 1 for cells within \code{max_dist_km} of a
+tide-gauge station, and 0 otherwise.}
+
+\item{max_dist_km}{Numeric. Maximum distance (km) from a tide-gauge station
+for a grid cell to receive a sea-level signal. Cells beyond this threshold
+receive \code{NA} for sea level and \eqn{\alpha = 0}. Only used when
+\code{area = FALSE} and \code{admin_level = NULL}. Default \code{500}.}
 
 \item{admin_level}{Integer or \code{NULL}. If \code{NULL}
 (default), returns a single national index. Otherwise computes the ACI
@@ -70,15 +113,38 @@ calculations in \code{build_admin_mask()} and
 not \code{NULL}. Default \code{4326} (WGS84, not recommended for
 production — prefer a local CRS such as \code{2154} for France or
 \code{27700} for the UK).}
+
+\item{save}{Logical. If \code{TRUE}, saves the grid-cell-level object
+to \code{save_dir} before aggregation. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Directory for the cached \code{.rds} file.
+Created if it does not exist. Default \code{"results/<country_abbrev>"}.}
+
+\item{load_dir}{Character. Directory from which to reload previously saved
+\code{.rds} component files when \code{computed_components = TRUE}.
+Default \code{"results/<country_abbrev>"}.}
+
+\item{computed_components}{Logical. If \code{TRUE}, rds files storing results
+of the computations of ACI components at grid cell level are reused.
+Default \code{FALSE}.}
 }
 \value{
-If \code{admin_level = NULL}: a \code{data.frame} with columns
-  \code{t90}, \code{t10}, \code{precipitation}, \code{drought},
-  \code{wind}, \code{sealevel}, and \code{ACI}, indexed by dates at the
-  chosen granularity.
-  If \code{admin_level} is an integer: a \code{data.frame} with one
-  \code{ACI_<unit>} column per administrative unit, indexed by dates at
-  the chosen granularity.
+\describe{
+    \item{National scalar (\code{area = TRUE}, \code{admin_level = NULL})}{
+      A \code{data.frame} with columns \code{t<percentile_high>},
+      \code{t<percentile_low>}, \code{precipitation}, \code{drought},
+      \code{wind}, \code{sealevel}, and \code{ACI}, indexed by dates at
+      the chosen granularity.}
+    \item{Grid-cell (\code{area = FALSE}, \code{admin_level = NULL})}{
+      A named list with one array \code{[lon x lat x nt]} per component
+      (\code{ACI}, \code{t<percentile_high>}, \code{t<percentile_low>},
+      \code{precipitation}, \code{drought}, \code{wind}, \code{sealevel}),
+      plus \code{lon}, \code{lat}, and \code{time} (character vector of
+      period labels at the chosen granularity).}
+    \item{Administrative (\code{admin_level} integer)}{
+      A \code{data.frame} with one \code{ACI_<unit>} column per
+      administrative unit, indexed by dates at the chosen granularity.}
+  }
 }
 \description{
 This is the main entry point of the package. It instantiates all five
@@ -86,39 +152,73 @@ climate components, standardises them over the reference period, and
 combines them into a single ACI time series:
 }
 \details{
-\deqn{ACI = \frac{T_{90} - T_{10} + P + D + \alpha \cdot SL + W}{5 + \alpha}}
+\deqn{ACI = \frac{T_{high} - T_{low} + P + D + \alpha \cdot SL + W}{5 + \alpha}}
 
 where \eqn{\alpha} is the sea-level erosion \code{factor} (coastal fraction,
 default \code{1/5}). For administrative units without coastal stations,
-\eqn{\alpha = 0} and the denominator becomes \code{5}.
+\eqn{\alpha = 0} and the denominator becomes \code{5}. At grid-cell level,
+\eqn{\alpha \in \{0, 1\}} depending on whether the cell lies within
+\code{max_dist_km} of a tide-gauge station.
 }
 \examples{
 \dontrun{
 # National ACI, annual granularity
 result <- calculate_aci(
-  temperature_data_path   = "data/t2m_1960-2020.nc",
-  precipitation_data_path = "data/tp_1960-2020.nc",
-  wind_u10_data_path      = "data/u10_1960-2020.nc",
-  wind_v10_data_path      = "data/v10_1960-2020.nc",
+  temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
+  precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
+  wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
+  wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
   country_abbrev          = "FRA",
-  mask_data_path          = "data/mask_france.nc",
+  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
   study_period            = c("1980-01-01", "2020-12-31"),
   reference_period        = c("1961-01-01", "1990-12-31"),
   granularity             = "year",
+  area                    = TRUE,
   factor                  = 1/5
+)
+
+# Grid-cell ACI (full spatial output)
+grid <- calculate_aci(
+  temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
+  precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
+  wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
+  wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+  country_abbrev          = "FRA",
+  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+  study_period            = c("1980-01-01", "2020-12-31"),
+  reference_period        = c("1961-01-01", "1990-12-31"),
+  granularity             = "year",
+  area                    = FALSE,
+  max_dist_km             = 500
+)
+
+# ACI with custom percentiles (T95 / T5)
+result_custom <- calculate_aci(
+  temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
+  precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
+  wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
+  wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+  country_abbrev          = "FRA",
+  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+  study_period            = c("1980-01-01", "2020-12-31"),
+  reference_period        = c("1961-01-01", "1990-12-31"),
+  granularity             = "year",
+  percentile_high         = 95,
+  percentile_low          = 5
 )
 
 # ACI by department (admin level 2), using Lambert-93 for France
 result_dept <- calculate_aci(
-  temperature_data_path   = "data/t2m_1960-2020.nc",
-  precipitation_data_path = "data/tp_1960-2020.nc",
-  wind_u10_data_path      = "data/u10_1960-2020.nc",
-  wind_v10_data_path      = "data/v10_1960-2020.nc",
+  temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
+  precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
+  wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
+  wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
   country_abbrev          = "FRA",
-  mask_data_path          = "data/mask_france.nc",
+  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
   study_period            = c("1980-01-01", "2020-12-31"),
   reference_period        = c("1961-01-01", "1990-12-31"),
   granularity             = "year",
+  area                    = FALSE,
   admin_level             = 2,
   crs_metric              = 2154
 )

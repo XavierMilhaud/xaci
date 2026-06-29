@@ -19,7 +19,7 @@ wind_power <- function(u10_dataset, v10_dataset, reference_period = NULL) {
 
   u <- u10_dataset$data
   v <- v10_dataset$data
-  ws <- sqrt(u^2 + v^2)
+  #ws <- sqrt(u^2 + v^2)
 
   # Resample u and v separately to daily means
   u_list <- resample_daily(list(data = u, time = u10_dataset$time,
@@ -147,6 +147,10 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
 #'   \code{NULL}. Default \code{FALSE}.
 #' @param admin_mask         Output of \code{build_admin_mask()}, or
 #'   \code{NULL} (default) for national behaviour.
+#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
+#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
+#' @param save_dir  Character. Directory for the cached \code{.rds} file.
+#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
 #' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
 #'   numeric vector (standardised monthly values).
 #'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
@@ -159,11 +163,22 @@ wind_component <- function(wind_u10_data_path, wind_v10_data_path,
                            mask_path        = NULL,
                            reference_period,
                            area             = FALSE,
-                           admin_mask       = NULL) {
+                           admin_mask       = NULL,
+                           save             = FALSE,
+                           save_dir         = paste("results/",
+                            strsplit(wind_u10_data_path, "/", fixed = TRUE)[[1]][3],
+                            sep = "")) {
 
   u10  <- load_component(wind_u10_data_path, "u10", mask_path)
   v10  <- load_component(wind_v10_data_path, "v10", mask_path)
   freq <- calculate_period_wind_exceedance_frequency(u10, v10, reference_period)
+
+  if (save) {
+    ref_tag <- paste(substr(reference_period[1], 1, 4),
+                     substr(reference_period[2], 1, 4), sep = "_")
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(freq, file.path(save_dir, paste0("wind_", ref_tag, ".rds")))
+  }
 
   # --- Country level ---
   if (is.null(admin_mask)) {

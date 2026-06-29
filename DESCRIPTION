@@ -26,7 +26,8 @@ Imports:
     ggplot2 (>= 3.4.0),
     tidyr,
     sf,
-    rnaturalearth
+    rnaturalearth,
+    units
 Suggests:
     testthat (>= 3.0.0),
     patchwork (>= 1.1.0),

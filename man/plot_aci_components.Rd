@@ -6,9 +6,10 @@
 \usage{
 plot_aci_components(
   aci_df,
-  type = c("facet", "stacked"),
-  title = "ACI Component Decomposition",
-  components = c("t90", "t10", "precipitation", "drought", "wind", "sealevel")
+  type = c("stacked", "line", "bar"),
+  components = NULL,
+  title = "ACI Component Contributions",
+  subtitle = NULL
 )
 }
 \arguments{
@@ -16,10 +17,13 @@ plot_aci_components(
 
 \item{type}{\code{"facet"} (default) or \code{"stacked"}.}
 
-\item{title}{Plot title.}
-
 \item{components}{Character vector of component names to include.
 Default: all six \code{c("t90","t10","precipitation","drought","wind","sealevel")}.}
+
+\item{title}{Plot title.}
+
+\item{subtitle}{Character or \code{NULL}. Optional subtitle displayed below
+the title. Default \code{NULL}.}
 }
 \value{
 A \code{ggplot} object.
@@ -32,8 +36,8 @@ make up the ACI.
 }
 \examples{
 \dontrun{
-plot_aci_components(result, type = "facet")
-plot_aci_components(result, type = "stacked")
+plot_aci_components(result, type = "bar")
+plot_aci_components(result, type = "stacked", components = c("t90","t10"))
 }
 
 }

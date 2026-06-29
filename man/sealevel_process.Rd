@@ -14,7 +14,14 @@ sealevel_process(directory, study_period, reference_period)
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 }
 \value{
-A standardised \code{data.frame} of sea-level anomalies.
+A named list with:
+  \describe{
+    \item{\code{data}}{Standardised \code{data.frame} of anomalies
+      \code{[time x stations]}, row names \code{"YYYY-MM-DD"}.}
+    \item{\code{coords}}{A \code{data.frame} with columns
+      \code{station_id}, \code{lon}, \code{lat}, one row per station
+      present in \code{data}.}
+  }
 }
 \description{
 Full sea-level processing pipeline

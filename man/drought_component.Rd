@@ -9,7 +9,10 @@ drought_component(
   mask_path = NULL,
   reference_period,
   area = FALSE,
-  admin_mask = NULL
+  admin_mask = NULL,
+  save = FALSE,
+  save_dir = paste("results/", strsplit(precipitation_data_path, "/", fixed =
+    TRUE)[[1]][3], sep = "")
 )
 }
 \arguments{
@@ -26,6 +29,12 @@ is not \code{NULL}. Default \code{FALSE}.}
 
 \item{admin_mask}{Output of \code{build_admin_mask()}, or
 \code{NULL} (default) for national behaviour.}
+
+\item{save}{Logical. If \code{TRUE}, saves the grid-cell-level object
+to \code{save_dir} before aggregation. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Directory for the cached \code{.rds} file.
+Created if it does not exist. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
 If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named

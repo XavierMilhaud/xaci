@@ -5,21 +5,21 @@
 \title{Download the country mask from the Copernicus CDS}
 \usage{
 download_mask(
-  area_name = "france",
+  country_abbrev = "FRA",
   area = c(51.5, -5.5, 41, 10),
-  dest_dir = "data/era5",
+  dest_dir = NULL,
   overwrite = FALSE
 )
 }
 \arguments{
-\item{area_name}{Character. Short label used in the output file name
-(e.g. \code{"france"}).}
+\item{country_abbrev}{Three-letter ISO 3166-1 alpha-3 country code
+(e.g. \code{"FRA"}).}
 
 \item{area}{Numeric vector \code{c(north, west, south, east)}.
 Default: metropolitan France.}
 
 \item{dest_dir}{Character. Directory for the output file.
-Default: \code{"data/era5"}.}
+Default: \code{"data/era5/<country_abbrev>/"}.}
 
 \item{overwrite}{Logical. Overwrite if the file already exists.
 Default \code{FALSE}.}
@@ -29,7 +29,7 @@ Invisibly, the path to the mask NetCDF file.
 }
 \description{
 Downloads the ERA5 land-sea mask for the given bounding box, then rescales
-it to \code{[0, 1]} and saves it as \code{mask_<area_name>.nc} in
+it to \code{[0, 1]} and saves it as \code{mask_<country_abbrev>.nc} in
 \code{dest_dir}. The mask variable is renamed to \code{country} so it is
 directly compatible with \code{\link{apply_mask}}.
 }
@@ -37,10 +37,10 @@ directly compatible with \code{\link{apply_mask}}.
 \dontrun{
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
+# Produces: data/era5/FRA/mask_FRA.nc
 download_mask(
-  area_name = "france",
-  area      = c(51.5, -5.5, 41.0, 10.0),
-  dest_dir  = "data/era5"
+  country_abbrev = "FRA",
+  area      = c(51.5, -5.5, 41.0, 10.0)
 )
 }
 }

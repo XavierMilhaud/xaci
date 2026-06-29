@@ -8,7 +8,8 @@ download_era5(
   variable = c("t2m", "tp", "u10", "v10"),
   years,
   area = c(51.5, -5.5, 41, 10),
-  dest_dir = "data/era5",
+  country_abbrev = NULL,
+  dest_dir = NULL,
   merge = TRUE,
   overwrite = FALSE
 )
@@ -23,8 +24,16 @@ download_era5(
 in decimal degrees. Default is metropolitan France:
 \code{c(51.5, -5.5, 41.0, 10.0)}.}
 
-\item{dest_dir}{Character. Directory where files will be saved. Created if
-it does not exist. Default: \code{"data/era5"}.}
+\item{country_abbrev}{Character. Three-letter ISO 3166-1 alpha-3 country
+code (e.g. \code{"FRA"}). Used to build the default output path
+\code{data/era5/<country_abbrev>/}.
+Ignored when \code{dest_dir} is supplied explicitly. One of
+\code{country_abbrev} or \code{dest_dir} must be provided.}
+
+\item{dest_dir}{Character. Directory where files will be saved. If
+\code{NULL} (default), built automatically from \code{country_abbrev}
+and \code{years} as \code{data/era5/<country_abbrev>/}.
+Created if it does not exist.}
 
 \item{merge}{Logical. If \code{TRUE} (default) and more than one year is
 requested, the individual yearly files are merged into a single file named
@@ -54,12 +63,20 @@ The CDS Personal Access Token must be stored beforehand with
 # Store your token once
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
-# Download total precipitation for France, 1961–1990
+# Automatic path: data/era5/FRA/tp_1961_1990.nc
+download_era5(
+  variable       = "tp",
+  years          = 1961:1990,
+  area           = c(51.5, -5.5, 41.0, 10.0),
+  country_abbrev = "FRA"
+)
+
+# Or explicit path:
 download_era5(
   variable = "tp",
   years    = 1961:1990,
   area     = c(51.5, -5.5, 41.0, 10.0),
-  dest_dir = "data/era5"
+  dest_dir = "my/custom/path"
 )
 }
 }

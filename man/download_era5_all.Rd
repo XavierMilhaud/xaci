@@ -7,7 +7,8 @@
 download_era5_all(
   years,
   area = c(51.5, -5.5, 41, 10),
-  dest_dir = "data/era5",
+  country_abbrev = NULL,
+  dest_dir = NULL,
   merge = TRUE,
   overwrite = FALSE
 )
@@ -18,7 +19,12 @@ download_era5_all(
 \item{area}{Bounding box \code{c(north, west, south, east)}.
 Default: metropolitan France.}
 
-\item{dest_dir}{Directory for output files. Default: \code{"data/era5"}.}
+\item{country_abbrev}{Character. ISO-3 country code (e.g. \code{"FRA"}).
+Used to build the default output path. One of \code{country_abbrev} or
+\code{dest_dir} must be provided.}
+
+\item{dest_dir}{Character. Output directory. If \code{NULL} (default),
+built automatically as \code{data/era5/<country_abbrev>/}.}
 
 \item{merge}{Logical. Merge yearly files. Default \code{TRUE}.}
 
@@ -36,10 +42,11 @@ per variable: \code{t2m}, \code{tp}, \code{u10}, \code{v10}).
 \dontrun{
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
+# Produces: data/era5/FRA/t2m_1961_1990.nc, tp_..., u10_..., v10_...
 download_era5_all(
-  years    = 1961:1990,
-  area     = c(51.5, -5.5, 41.0, 10.0),
-  dest_dir = "data/era5"
+  years          = 1961:1990,
+  area           = c(51.5, -5.5, 41.0, 10.0),
+  country_abbrev = "FRA"
 )
 }
 }

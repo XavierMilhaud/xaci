@@ -43,7 +43,7 @@ horizontal zero reference line.
 \dontrun{
 #result <- calculate_aci(...)
 #plot_aci_timeseries(result)
-aci_df <- readRDS("data/aci_df_example")
+aci_df <- readRDS("results/FRA/aci_df_example")
 plot_aci_timeseries(aci_df)
 }
 

@@ -135,9 +135,10 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
   }
 
   # Monthly frequency (sum / count)
-  daily_list <- list(data = crossing, time = daily_ext$time)
-  monthly_sum   <- resample_monthly(crossing, daily_ext$time, FUN = sum)
-  monthly_count <- resample_monthly(crossing, daily_ext$time,
+  crossing_dataset <- list(data = crossing, time = daily_ext$time,
+                           lon  = dataset$lon, lat = dataset$lat)
+  monthly_sum   <- resample_monthly(crossing_dataset, FUN = sum)
+  monthly_count <- resample_monthly(crossing_dataset,
                                     FUN = function(x, na.rm) length(x))
 
   freq_data <- monthly_sum$data / monthly_count$data
@@ -161,6 +162,10 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #'   \code{NULL}. Default \code{FALSE}.
 #' @param admin_mask            Output of \code{build_admin_mask()}, or
 #'   \code{NULL} (default) for national behaviour.
+#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
+#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
+#' @param save_dir  Character. Directory for the cached \code{.rds} file.
+#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
 #' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
 #'   numeric vector (standardised monthly values).
 #'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
@@ -175,7 +180,11 @@ temperature_component <- function(temperature_data_path, mask_path,
                                   extremum         = "max",
                                   above_thresholds = TRUE,
                                   area             = FALSE,
-                                  admin_mask       = NULL) {
+                                  admin_mask       = NULL,
+                                  save             = FALSE,
+                                  save_dir         = paste("results/",
+                                    strsplit(temperature_data_path, "/", fixed = TRUE)[[1]][3],
+                                    sep = "")) {
 
   dataset <- load_component(temperature_data_path, "t2m", mask_path)
   # Conversion Kelvin -> Celsius
@@ -196,6 +205,15 @@ temperature_component <- function(temperature_data_path, mask_path,
     lat  = dataset$lat
   )
 
+  # Save highest resolution computed data (possibly useful for reuse at different spatial/time resolution)
+  if (save) {
+    ref_tag  <- paste(substr(reference_period[1], 1, 4),
+                      substr(reference_period[2], 1, 4), sep = "_")
+    label    <- if (above_thresholds) "temperature_highs" else "temperature_lows"
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(combined, file.path(save_dir, paste0(label, "_", ref_tag, ".rds")))
+  }
+
   # Standardization
   standardized <- standardize_metric(combined, reference_period, area = FALSE)
 
@@ -205,12 +223,14 @@ temperature_component <- function(temperature_data_path, mask_path,
       # National spatial mean
       return(standardize_metric(combined, reference_period, area = TRUE))
     } else {
+      # ERA5 Grid cell level (NUTS)
       return(standardized)
     }
   }
 
   # --- Administrative level specified ---
-  col_prefix <- if (percentile == 90) "t90" else "t10"
+  #col_prefix <- if (percentile == 90) "t90" else "t10"
+  col_prefix <- sprintf("t%d", as.integer(percentile))
   reduce_dataarray_to_dataframe(standardized, column_name = col_prefix,
                                 admin_mask = admin_mask)
 }

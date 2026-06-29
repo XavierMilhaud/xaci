@@ -3,6 +3,84 @@
 #' @name utils
 NULL
 
+# Internal lookup table: ISO-3 code -> English country name as expected by
+# rnaturalearth::ne_states(). Only countries relevant to the ACI are listed;
+# extend as needed.
+.iso3_to_ne_name <- c(
+  AUS = "Australia",
+  AUT = "Austria",
+  BEL = "Belgium",
+  CAN = "Canada",
+  CHE = "Switzerland",
+  CZE = "Czechia",
+  DEU = "Germany",
+  DNK = "Denmark",
+  ESP = "Spain",
+  FIN = "Finland",
+  FRA = "France",
+  GBR = "United Kingdom",
+  GRC = "Greece",
+  HUN = "Hungary",
+  IRL = "Ireland",
+  ITA = "Italy",
+  LUX = "Luxembourg",
+  NLD = "Netherlands",
+  NOR = "Norway",
+  NZL = "New Zealand",
+  POL = "Poland",
+  PRT = "Portugal",
+  ROU = "Romania",
+  SVK = "Slovakia",
+  SVN = "Slovenia",
+  SWE = "Sweden",
+  USA = "United States of America"
+)
+
+#' Convert an ISO-3 country code to its English name for rnaturalearth
+#'
+#' Internal helper used by \code{build_admin_mask()} and
+#' \code{assign_sealevel_to_admin()} to translate \code{country_abbrev}
+#' (ISO-3, e.g. \code{"FRA"}) into the English name expected by
+#' \code{rnaturalearth::ne_states()}.
+#'
+#' @param iso3 A single ISO-3 character string (case-insensitive).
+#' @return The corresponding English country name.
+#' @keywords internal
+.iso3_to_country_name <- function(iso3) {
+  iso3 <- toupper(trimws(iso3))
+  name <- .iso3_to_ne_name[iso3]
+  if (is.na(name))
+    stop(
+      "Unknown ISO-3 code: '", iso3, "'. ",
+      "Please add it to the .iso3_to_ne_name table in utils.R."
+    )
+  unname(name)
+}
+
+#' Build standard ERA5 file paths from country and years
+#'
+#' Internal helper that reconstructs the paths produced by
+#' \code{download_era5_all()} and \code{download_mask()}.
+#'
+#' @param country_abbrev ISO-3 country code (e.g. \code{"FRA"}).
+#' @param years          Integer vector of years (e.g. \code{2011:2015}).
+#' @param base_dir       Root data directory. Default \code{"data/era5"}.
+#' @return A named list with elements \code{t2m}, \code{tp}, \code{u10},
+#'   \code{v10}, and \code{mask}.
+#' @keywords internal
+.build_era5_paths <- function(country_abbrev, years, base_dir = "data/era5") {
+  iso   <- toupper(country_abbrev)
+  period <- paste(years[1], years[length(years)], sep = "_")
+  era5_dir <- file.path(base_dir, iso)
+  list(
+    t2m      = file.path(era5_dir, sprintf("t2m_%s.nc",  period)),
+    tp       = file.path(era5_dir, sprintf("tp_%s.nc",   period)),
+    u10      = file.path(era5_dir, sprintf("u10_%s.nc",  period)),
+    v10      = file.path(era5_dir, sprintf("v10_%s.nc",  period)),
+    mask     = file.path(base_dir, iso, sprintf("mask_%s.nc", iso))
+  )
+}
+
 #' Load a NetCDF variable as a 3D array [lon x lat x time]
 #'
 #' @param path Path to the NetCDF file.
@@ -363,7 +441,7 @@ build_admin_mask <- function(lon, lat, country_abbrev,
                              crs_metric  = 4326) {
   # Administrative polygons projected into the metric CRS
   admin_sf <- rnaturalearth::ne_states(
-    country     = country_abbrev,
+    country     = .iso3_to_country_name(country_abbrev),
     returnclass = "sf"
   )
   admin_sf <- admin_sf[, c("name", "geometry")]

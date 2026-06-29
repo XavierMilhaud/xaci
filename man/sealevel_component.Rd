@@ -8,7 +8,13 @@ sealevel_component(
   country_abbrev,
   study_period,
   reference_period,
-  admin_assignment = NULL
+  lon = NULL,
+  lat = NULL,
+  max_dist_km = 500,
+  data_dir = NULL,
+  admin_assignment = NULL,
+  save = FALSE,
+  save_dir = paste("results/", country_abbrev, sep = "")
 )
 }
 \arguments{
@@ -18,18 +24,32 @@ sealevel_component(
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
+\item{lon}{Numeric vector or \code{NULL}. ERA5 grid longitudes. If provided
+together with \code{lat}, the standardised anomalies are interpolated onto
+the ERA5 grid and a list with a \code{[lon x lat x time]} array is
+returned. If \code{NULL} (default), the original station-level
+\code{data.frame} is returned.}
+
+\item{lat}{Numeric vector or \code{NULL}. ERA5 grid latitudes.}
+
+\item{max_dist_km}{Numeric. Passed to \code{interpolate_sealevel_to_grid()}.
+Default \code{500}.}
+
+\item{data_dir}{Character or \code{NULL}.}
+
 \item{admin_assignment}{Output of \code{assign_sealevel_to_admin()}, or
-\code{NULL} (default) for national behaviour.}
+\code{NULL}.}
+
+\item{save}{Logical. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{admin_assignment} is \code{NULL}: a one-column
-  \code{data.frame} named \code{"sealevel"} indexed by month-start dates.
-  Otherwise: a \code{data.frame} with one column
-  \code{sealevel_<unit>} per administrative unit containing coastal
-  tide-gauge stations, indexed by month-start dates. Units without stations
-  are absent from the result.
+If \code{lon} and \code{lat} are provided: a list with \code{data}
+  (\code{[nl x nw x nt]} array), \code{lon}, \code{lat}, \code{time}.
+  Otherwise: a \code{data.frame} of station anomalies (national or per
+  administrative unit).
 }
 \description{
-Downloads PSMSL tide-gauge data for the given country, runs the full
-processing pipeline, and returns the regional mean standardised anomaly.
+Calculate the sea-level component of the ACI
 }

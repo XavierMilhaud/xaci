@@ -47,10 +47,10 @@ hard-required; the function works without \pkg{sf} using
 \examples{
 \dontrun{
 # Either maps precipitation from original dataset:
-#ds <- load_component("data/era5/tp_2011_2015.nc", "tp",
-#                     mask_path = "data/era5/mask_france.nc")
+#ds <- load_component("data/era5/FRA/tp_2011_2015.nc", "tp",
+#                     mask_path = "data/era5/FRA/mask_FRA.nc")
 # Or maps precipitation from the created precipitation component of the ACI:
-ds <- readRDS("data/components_gridCell_level/prec.rds")
+ds <- readRDS("results/FRA/precipitation_2011_2013.rds")
 plot_aci_map(ds, time_index = "mean", var_label = "Precipitation (unit?)",
              title = "Mean precipitation")
 }

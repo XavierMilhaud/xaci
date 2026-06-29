@@ -76,38 +76,35 @@ drought_interpolate <- function(cdd_annual) {
   dims  <- dim(data)
   nl    <- dims[1]; nw <- dims[2]; ny <- dims[3]
 
-  #monthly_times <- c()
-  monthly_times <- as.POSIXct(character(), tz = "UTC")
-  monthly_list  <- list()
+  monthly_strings <- character(0)   # ← stocke les dates comme strings
+  monthly_list    <- list()
 
   for (k in seq_len(ny - 1L)) {
     for (m in 1:12) {
-      w1      <- (12 - m) / 12
-      w2      <- m / 12
-      interp  <- w1 * data[, , k] + w2 * data[, , k + 1L]
+      w1     <- (12 - m) / 12
+      w2     <- m / 12
+      interp <- w1 * data[, , k] + w2 * data[, , k + 1L]
       monthly_list[[length(monthly_list) + 1L]] <- interp
-      monthly_times <- c(monthly_times,
-                         as.POSIXct(sprintf("%d-%02d-01", years[k], m),
-                                    format = "%Y-%m-%d", tz = "UTC"))
+      monthly_strings <- c(monthly_strings,
+                           sprintf("%d-%02d-01", years[k], m))
     }
   }
 
-  # Last year: repeat last annual value for all 12 months
+  # Dernière année
   for (m in 1:12) {
     monthly_list[[length(monthly_list) + 1L]] <- data[, , ny]
-    monthly_times <- c(monthly_times,
-                       as.character(as.POSIXct(sprintf("%d-%02d-01", years[ny], m),
-                                  format = "%Y-%m-%d", tz = "UTC")))
+    monthly_strings <- c(monthly_strings,
+                         sprintf("%d-%02d-01", years[ny], m))
   }
 
-  # Stack into [lon x lat x months]
+  # Conversion unique à la fin → pas de perte de type
+  monthly_times <- as.POSIXct(monthly_strings, format = "%Y-%m-%d", tz = "UTC")
+
   out_data <- array(NA_real_, c(nl, nw, length(monthly_list)))
   for (k in seq_along(monthly_list)) out_data[, , k] <- monthly_list[[k]]
 
-  list(data     = out_data,
-       time     = monthly_times,
-       lon      = cdd_annual$lon,
-       lat      = cdd_annual$lat)
+  list(data = out_data, time = monthly_times,
+       lon  = cdd_annual$lon, lat = cdd_annual$lat)
 }
 
 #' Calculate the drought component of the ACI
@@ -123,6 +120,10 @@ drought_interpolate <- function(cdd_annual) {
 #'   is not \code{NULL}. Default \code{FALSE}.
 #' @param admin_mask              Output of \code{build_admin_mask()}, or
 #'   \code{NULL} (default) for national behaviour.
+#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
+#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
+#' @param save_dir  Character. Directory for the cached \code{.rds} file.
+#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
 #' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
 #'   numeric vector (standardised monthly values).
 #'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
@@ -135,11 +136,22 @@ drought_component <- function(precipitation_data_path,
                               mask_path        = NULL,
                               reference_period,
                               area             = FALSE,
-                              admin_mask       = NULL) {
+                              admin_mask       = NULL,
+                              save             = FALSE,
+                              save_dir         = paste("results/",
+                                strsplit(precipitation_data_path, "/", fixed = TRUE)[[1]][3],
+                                sep = "")) {
 
   dataset     <- load_component(precipitation_data_path, "tp", mask_path)
   cdd_annual  <- max_consecutive_dry_days(dataset)
   cdd_monthly <- drought_interpolate(cdd_annual)
+
+  if (save) {
+    ref_tag <- paste(substr(reference_period[1], 1, 4),
+                     substr(reference_period[2], 1, 4), sep = "_")
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(cdd_monthly, file.path(save_dir, paste0("drought_", ref_tag, ".rds")))
+  }
 
   # --- Country level ---
   if (is.null(admin_mask)) {

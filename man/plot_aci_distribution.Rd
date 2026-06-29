@@ -6,24 +6,29 @@
 \usage{
 plot_aci_distribution(
   aci_df,
+  components = NULL,
+  include_aci = FALSE,
   type = c("boxplot", "violin", "density"),
-  include_aci = TRUE,
-  title = "Distribution of ACI Components",
-  components = c("t90", "t10", "precipitation", "drought", "wind", "sealevel")
+  title = "ACI Component Distributions",
+  subtitle = NULL
 )
 }
 \arguments{
 \item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}.}
 
+\item{components}{Character vector of component columns to include.}
+
+\item{include_aci}{Logical. If \code{TRUE}, adds the composite \code{ACI}
+column to the distribution plot alongside the components. Default
+\code{FALSE}.}
+
 \item{type}{\code{"boxplot"} (default), \code{"violin"}, or
 \code{"density"}.}
 
-\item{include_aci}{Logical. Include the global ACI series in the plot?
-Default \code{TRUE}.}
-
 \item{title}{Plot title.}
 
-\item{components}{Character vector of component columns to include.}
+\item{subtitle}{Character or \code{NULL}. Optional subtitle displayed below
+the title. Default \code{NULL}.}
 }
 \value{
 A \code{ggplot} object.

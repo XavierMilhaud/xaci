@@ -58,6 +58,10 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #'   is not \code{NULL}. Default \code{FALSE}.
 #' @param admin_mask              Output of \code{build_admin_mask()}, or
 #'   \code{NULL} (default) for national behaviour.
+#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
+#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
+#' @param save_dir  Character. Directory for the cached \code{.rds} file.
+#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
 #' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
 #'   numeric vector (standardised monthly values).
 #'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
@@ -72,11 +76,22 @@ precipitation_component <- function(precipitation_data_path,
                                     var_name         = "tp",
                                     window_size      = 5L,
                                     area             = FALSE,
-                                    admin_mask       = NULL) {
+                                    admin_mask       = NULL,
+                                    save             = FALSE,
+                                    save_dir         = paste("results/",
+                                      strsplit(precipitation_data_path, "/", fixed = TRUE)[[1]][3],
+                                      sep = "")) {
 
   dataset    <- load_component(precipitation_data_path, var_name, mask_path)
   period_max <- calculate_maximum_precipitation_over_window(dataset, var_name,
                                                             window_size)
+
+  if (save) {
+    ref_tag <- paste(substr(reference_period[1], 1, 4),
+                     substr(reference_period[2], 1, 4), sep = "_")
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(period_max, file.path(save_dir, paste0("precipitation_", ref_tag, ".rds")))
+  }
 
   # --- Country level ---
   if (is.null(admin_mask)) {

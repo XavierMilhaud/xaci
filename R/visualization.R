@@ -24,34 +24,78 @@ utils::globalVariables(c("value", "component", "lon", "lat", "ACI"))
 #' Validate that the ACI result data.frame has the expected columns
 #' @noRd
 .check_aci_df <- function(df) {
-  required <- c("t90", "t10", "precipitation", "drought", "wind",
-                "sealevel", "ACI")
-  missing  <- setdiff(required, colnames(df))
-  if (length(missing) > 0L) {
+  required_fixed <- c("precipitation", "drought", "wind", "sealevel", "ACI")
+  missing <- setdiff(required_fixed, colnames(df))
+  if (length(missing) > 0L)
     stop("The data.frame is missing column(s): ",
-         paste(missing, collapse = ", "),
-         ".\nExpected output from calculate_aci().")
-  }
+         paste(missing, collapse = ", "))
+  # Check that there is at least 2 columns of temperature (t<n>)
+  t_cols <- grep("^t\\d+$", colnames(df), value = TRUE)
+  if (length(t_cols) < 2L)
+    stop("The data.frame must contain at least two temperature columns (e.g. t90, t10).")
   invisible(TRUE)
 }
 
 #' Parse row names of an ACI data.frame into Date objects
 #' @noRd
 .parse_dates <- function(df) {
-  as.Date(rownames(df))
+  rn <- rownames(df)
+
+  # Détection du format par le premier élément
+  first <- rn[1]
+
+  if (grepl("^\\d{4}-\\d{2}$", first)) {
+    # Mensuel : "2010-01" -> "2010-01-01"
+    as.Date(paste0(rn, "-01"))
+
+  } else if (grepl("^\\d{4}$", first)) {
+    # Annuel : "2010" -> "2010-01-01"
+    as.Date(paste0(rn, "-01-01"))
+
+  } else if (grepl("^\\d{4}-S\\d$", first)) {
+    # Semestriel : "2010-S1" -> "2010-01-01", "2010-S2" -> "2010-07-01"
+    year <- as.integer(sub("-S\\d$", "", rn))
+    sem  <- as.integer(sub("^\\d{4}-S", "", rn))
+    month <- ifelse(sem == 1L, "01", "07")
+    as.Date(sprintf("%d-%s-01", year, month))
+
+  } else if (grepl("^\\d{4}-(DJF|MAM|JJA|SON)$", first)) {
+    # Saisonnier : "2010-DJF" -> "2010-01-01", etc.
+    season_month <- c(DJF = "01", MAM = "03", JJA = "06", SON = "09")
+    year   <- as.integer(sub("-(DJF|MAM|JJA|SON)$", "", rn))
+    season <- sub("^\\d{4}-", "", rn)
+    as.Date(sprintf("%d-%s-01", year, season_month[season]))
+
+  } else {
+    stop("Unrecognised row name format in ACI data.frame: '", first, "'.\n",
+         "Expected one of: 'YYYY-MM', 'YYYY', 'YYYY-Sn', 'YYYY-DJF/MAM/JJA/SON'.")
+  }
 }
 
 #' Default component palette (colour-blind-friendly)
 #' @noRd
-.component_colours <- function() {
-  c(
-    t90           = "#D62728",   # red
-    t10           = "#1F77B4",   # blue
-    precipitation = "#2CA02C",   # green
-    drought       = "#FF7F0E",   # orange
-    wind          = "#9467BD",   # purple
-    sealevel      = "#17BECF"    # cyan
+.component_colours <- function(col_high = "t90", col_low = "t10") {
+  colours <- c(
+    "#D62728",   # red   -> temperature high
+    "#1F77B4",   # blue  -> temperature low
+    "#2CA02C",   # green -> precipitation
+    "#FF7F0E",   # orange -> drought
+    "#9467BD",   # purple -> wind
+    "#8C564B"    # brown  -> sealevel
   )
+  names(colours) <- c(col_high, col_low,
+                      "precipitation", "drought", "wind", "sealevel")
+  colours
+}
+
+#' Infer high and low temperature column names from an ACI data.frame
+#' @noRd
+.infer_t_cols <- function(df) {
+  t_cols <- grep("^t\\d+$", colnames(df), value = TRUE)
+  if (length(t_cols) < 2L)
+    stop("The data.frame must contain at least two temperature columns (e.g. t90, t10).")
+  t_cols <- t_cols[order(as.integer(sub("^t", "", t_cols)))]
+  list(low = t_cols[1], high = t_cols[2])
 }
 
 # ---------------------------------------------------------------------------
@@ -82,7 +126,7 @@ utils::globalVariables(c("value", "component", "lon", "lat", "ACI"))
 #' \dontrun{
 #' #result <- calculate_aci(...)
 #' #plot_aci_timeseries(result)
-#' aci_df <- readRDS("data/aci_df_example")
+#' aci_df <- readRDS("results/FRA/aci_df_example")
 #' plot_aci_timeseries(aci_df)
 #' }
 #'
@@ -96,6 +140,11 @@ plot_aci_timeseries <- function(aci_df,
                                 colour     = "#1F77B4",
                                 fill_area  = TRUE) {
   .check_aci_df(aci_df)
+
+  granularity_label <- if (grepl("^\\d{4}$", rownames(aci_df)[1])) "Annual" else
+    if (grepl("^\\d{4}-S", rownames(aci_df)[1])) "Semester" else
+      if (grepl("(DJF|MAM|JJA|SON)$", rownames(aci_df)[1])) "Seasonal" else
+        "Monthly"
 
   df <- data.frame(
     date = .parse_dates(aci_df),
@@ -136,7 +185,7 @@ plot_aci_timeseries <- function(aci_df,
     ggplot2::scale_x_date(date_breaks = "5 years", date_labels = "%Y") +
     ggplot2::labs(
       title    = title,
-      subtitle = "Monthly values with LOESS trend",
+      subtitle = paste(granularity_label, "values with LOESS trend"),
       x        = NULL,
       y        = "Standardised ACI"
     ) +
@@ -161,16 +210,18 @@ plot_aci_timeseries <- function(aci_df,
 #'
 #' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}.
 #' @param type    \code{"facet"} (default) or \code{"stacked"}.
-#' @param title   Plot title.
 #' @param components Character vector of component names to include.
 #'   Default: all six \code{c("t90","t10","precipitation","drought","wind","sealevel")}.
+#' @param title   Plot title.
+#' @param subtitle Character or \code{NULL}. Optional subtitle displayed below
+#'   the title. Default \code{NULL}.
 #'
 #' @return A \code{ggplot} object.
 #'
 #' @examples
 #' \dontrun{
-#' plot_aci_components(result, type = "facet")
-#' plot_aci_components(result, type = "stacked")
+#' plot_aci_components(result, type = "bar")
+#' plot_aci_components(result, type = "stacked", components = c("t90","t10"))
 #' }
 #'
 #' @importFrom ggplot2 ggplot aes geom_area geom_line facet_wrap scale_fill_manual
@@ -179,76 +230,87 @@ plot_aci_timeseries <- function(aci_df,
 #' @importFrom tidyr pivot_longer
 #' @export
 plot_aci_components <- function(aci_df,
-                                type       = c("facet", "stacked"),
-                                title      = "ACI Component Decomposition",
-                                components = c("t90", "t10", "precipitation",
-                                               "drought", "wind", "sealevel")) {
-  .check_aci_df(aci_df)
+                                type       = c("stacked", "line", "bar"),
+                                components = NULL,   # <- NULL par défaut, inféré
+                                title      = "ACI Component Contributions",
+                                subtitle   = NULL) {
   type <- match.arg(type)
+  .check_aci_df(aci_df)
 
-  colours <- .component_colours()
-  components <- intersect(components, names(colours))
+  # Inférer les colonnes de température
+  t_cols     <- .infer_t_cols(aci_df)
+  col_high   <- t_cols$high
+  col_low    <- t_cols$low
+  all_components <- c(col_high, col_low,
+                      "precipitation", "drought", "wind", "sealevel")
+
+  # Valeur par défaut de components
+  if (is.null(components)) components <- all_components
+
+  # Valider les composantes demandées
+  unknown <- setdiff(components, all_components)
+  if (length(unknown) > 0L)
+    stop("Unknown component(s): ", paste(unknown, collapse = ", "),
+         "\nAvailable: ", paste(all_components, collapse = ", "))
+
+  colours <- .component_colours(col_high, col_low)
+
+  # Labels dynamiques
+  labels_map <- c(
+    setNames(
+      c(paste0("T", sub("^t", "", col_high), " (hot)"),
+        paste0("T", sub("^t", "", col_low),  " (cold)")),
+      c(col_high, col_low)
+    ),
+    precipitation = "Precipitation",
+    drought       = "Drought",
+    wind          = "Wind",
+    sealevel      = "Sea level"
+  )
 
   df_long <- data.frame(
-    date = rep(.parse_dates(aci_df), times = length(components)),
+    date      = rep(.parse_dates(aci_df), times = length(components)),
     component = rep(components, each = nrow(aci_df)),
-    value     = unlist(lapply(components, function(cn) aci_df[[cn]]))
+    value     = unlist(aci_df[, components, drop = FALSE])
   )
   df_long$component <- factor(df_long$component, levels = components)
 
-  if (type == "facet") {
-    p <- ggplot2::ggplot(df_long,
-                         ggplot2::aes(x = date, y = value,
-                                      colour = component)) +
-      ggplot2::geom_hline(yintercept = 0, colour = "grey70",
-                          linetype = "dashed", linewidth = 0.3) +
-      ggplot2::geom_line(linewidth = 0.6) +
-      ggplot2::facet_wrap(~ component, ncol = 2, scales = "free_y") +
-      ggplot2::scale_colour_manual(values = colours, guide = "none") +
-      ggplot2::scale_x_date(date_breaks = "10 years", date_labels = "%Y") +
-      ggplot2::labs(
-        title    = title,
-        subtitle = "Each panel shows one standardised component",
-        x        = NULL, y = "Standardised value"
-      ) +
-      ggplot2::theme_minimal(base_size = 11) +
-      ggplot2::theme(
-        plot.title    = ggplot2::element_text(face = "bold"),
-        axis.text.x   = ggplot2::element_text(angle = 30, hjust = 1, size = 8),
-        panel.grid.minor = ggplot2::element_blank(),
-        strip.text    = ggplot2::element_text(face = "bold")
-      )
+  p <- ggplot2::ggplot(df_long,
+                       ggplot2::aes(x = date, y = value,
+                                    fill    = if (type == "stacked") component else NULL,
+                                    colour  = if (type != "stacked") component else NULL,
+                                    group   = component))
 
+  if (type == "stacked") {
+    p <- p +
+      ggplot2::geom_area(alpha = 0.8, position = "stack") +
+      ggplot2::scale_fill_manual(values = colours[components],
+                                 labels = labels_map[components],
+                                 name   = "Component")
+  } else if (type == "line") {
+    p <- p +
+      ggplot2::geom_line(linewidth = 0.8) +
+      ggplot2::scale_colour_manual(values = colours[components],
+                                   labels = labels_map[components],
+                                   name   = "Component")
   } else {
-    # Stacked area — shift values to be non-negative for stacking clarity
-    p <- ggplot2::ggplot(df_long,
-                         ggplot2::aes(x = date, y = value,
-                                      fill = component)) +
-      ggplot2::geom_area(position = "stack", alpha = 0.8) +
-      ggplot2::scale_fill_manual(
-        values = colours,
-        name   = "Component",
-        labels = c(t90 = "T90 (hot)", t10 = "T10 (cold)",
-                   precipitation = "Precipitation",
-                   drought = "Drought", wind = "Wind",
-                   sealevel = "Sea Level")
-      ) +
-      ggplot2::scale_x_date(date_breaks = "10 years", date_labels = "%Y") +
-      ggplot2::labs(
-        title    = title,
-        subtitle = "Stacked standardised components",
-        x        = NULL, y = "Cumulative standardised value"
-      ) +
-      ggplot2::theme_minimal(base_size = 12) +
-      ggplot2::theme(
-        plot.title   = ggplot2::element_text(face = "bold"),
-        axis.text.x  = ggplot2::element_text(angle = 30, hjust = 1),
-        panel.grid.minor = ggplot2::element_blank(),
-        legend.position  = "bottom"
-      )
+    p <- p +
+      ggplot2::geom_col(position = "dodge") +
+      ggplot2::scale_fill_manual(values = colours[components],
+                                 labels = labels_map[components],
+                                 name   = "Component")
   }
 
-  p
+  p +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+    ggplot2::labs(
+      title    = title,
+      subtitle = subtitle,
+      x        = NULL,
+      y        = "Standardised anomaly"
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "bottom")
 }
 
 # ---------------------------------------------------------------------------
@@ -281,10 +343,10 @@ plot_aci_components <- function(aci_df,
 #' @examples
 #' \dontrun{
 #' # Either maps precipitation from original dataset:
-#' #ds <- load_component("data/era5/tp_2011_2015.nc", "tp",
-#' #                     mask_path = "data/era5/mask_france.nc")
+#' #ds <- load_component("data/era5/FRA/tp_2011_2015.nc", "tp",
+#' #                     mask_path = "data/era5/FRA/mask_FRA.nc")
 #' # Or maps precipitation from the created precipitation component of the ACI:
-#' ds <- readRDS("data/components_gridCell_level/prec.rds")
+#' ds <- readRDS("results/FRA/precipitation_2011_2013.rds")
 #' plot_aci_map(ds, time_index = "mean", var_label = "Precipitation (unit?)",
 #'              title = "Mean precipitation")
 #' }
@@ -374,13 +436,15 @@ plot_aci_map <- function(dataset,
 #' \strong{density curves} (\code{type = "density"}).
 #'
 #' @param aci_df     A \code{data.frame} returned by \code{calculate_aci()}.
+#' @param components Character vector of component columns to include.
+#' @param include_aci Logical. If \code{TRUE}, adds the composite \code{ACI}
+#'   column to the distribution plot alongside the components. Default
+#'   \code{FALSE}.
 #' @param type       \code{"boxplot"} (default), \code{"violin"}, or
 #'   \code{"density"}.
-#' @param include_aci Logical. Include the global ACI series in the plot?
-#'   Default \code{TRUE}.
 #' @param title      Plot title.
-#' @param components Character vector of component columns to include.
-#'
+#' @param subtitle Character or \code{NULL}. Optional subtitle displayed below
+#'   the title. Default \code{NULL}.
 #' @return A \code{ggplot} object.
 #'
 #' @examples
@@ -394,105 +458,76 @@ plot_aci_map <- function(dataset,
 #'   labs theme_minimal theme element_text geom_hline after_stat
 #' @export
 plot_aci_distribution <- function(aci_df,
+                                  components   = NULL,
+                                  include_aci  = FALSE,
                                   type         = c("boxplot", "violin", "density"),
-                                  include_aci  = TRUE,
-                                  title        = "Distribution of ACI Components",
-                                  components   = c("t90", "t10",
-                                                   "precipitation", "drought",
-                                                   "wind", "sealevel")) {
-  .check_aci_df(aci_df)
+                                  title        = "ACI Component Distributions",
+                                  subtitle     = NULL) {
   type <- match.arg(type)
+  .check_aci_df(aci_df)
 
-  colours <- .component_colours()
-  if (include_aci) {
-    all_cols <- c(components, "ACI")
-    colours  <- c(colours, ACI = "#333333")
-  } else {
-    all_cols <- components
-  }
-  all_cols <- intersect(all_cols, colnames(aci_df))
+  # Inférer les colonnes de température
+  t_cols     <- .infer_t_cols(aci_df)
+  col_high   <- t_cols$high
+  col_low    <- t_cols$low
+  all_components <- c(col_high, col_low,
+                      "precipitation", "drought", "wind", "sealevel")
 
-  # Long format
-  df_long <- data.frame(
-    component = rep(all_cols, each = nrow(aci_df)),
-    value     = unlist(lapply(all_cols, function(cn) aci_df[[cn]]))
-  )
-  df_long$component <- factor(df_long$component, levels = all_cols)
+  if (is.null(components)) components <- all_components
+
+  unknown <- setdiff(components, all_components)
+  if (length(unknown) > 0L)
+    stop("Unknown component(s): ", paste(unknown, collapse = ", "),
+         "\nAvailable: ", paste(all_components, collapse = ", "))
+
+  if (include_aci) components <- c(components, "ACI")
+
+  colours <- .component_colours(col_high, col_low)
 
   labels_map <- c(
-    t90 = "T90\n(hot)", t10 = "T10\n(cold)",
-    precipitation = "Precip.", drought = "Drought",
-    wind = "Wind", sealevel = "Sea Level",
-    ACI = "ACI\n(global)"
+    setNames(
+      c(paste0("T", sub("^t", "", col_high), "\n(hot)"),
+        paste0("T", sub("^t", "", col_low),  "\n(cold)")),
+      c(col_high, col_low)
+    ),
+    precipitation = "Precip.\n",
+    drought       = "Drought\n",
+    wind          = "Wind\n",
+    sealevel      = "Sea\nlevel",
+    ACI           = "ACI"
   )
 
-  p_base <- ggplot2::ggplot(df_long,
-                             ggplot2::aes(x = component, y = value,
-                                          fill = component,
-                                          colour = component)) +
-    ggplot2::geom_hline(yintercept = 0, colour = "grey60",
-                        linetype = "dashed", linewidth = 0.4) +
-    ggplot2::scale_fill_manual(values   = colours, guide = "none") +
-    ggplot2::scale_colour_manual(values = colours, guide = "none") +
-    ggplot2::scale_x_discrete(labels = labels_map) +
-    ggplot2::labs(
-      title = title,
-      x     = NULL,
-      y     = "Standardised value"
-    ) +
-    ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(
-      plot.title       = ggplot2::element_text(face = "bold"),
-      panel.grid.major.x = ggplot2::element_blank(),
-      panel.grid.minor   = ggplot2::element_blank()
-    )
+  df_long <- data.frame(
+    component = rep(components, each = nrow(aci_df)),
+    value     = unlist(aci_df[, components, drop = FALSE])
+  )
+  df_long$component <- factor(df_long$component,
+                              levels   = components,
+                              labels   = labels_map[components])
+
+  p <- ggplot2::ggplot(df_long,
+                       ggplot2::aes(x = component, y = value,
+                                    fill = component, colour = component))
 
   if (type == "boxplot") {
-    p <- p_base +
-      ggplot2::geom_boxplot(alpha = 0.7, outlier.size = 1,
-                             outlier.alpha = 0.5, width = 0.6) +
-      ggplot2::labs(subtitle = "Monthly distributions per component (boxplots)")
-
+    p <- p + ggplot2::geom_boxplot(alpha = 0.6, outlier.size = 1)
   } else if (type == "violin") {
-    p <- p_base +
-      ggplot2::geom_violin(alpha = 0.6, trim = FALSE, linewidth = 0.5) +
-      ggplot2::geom_boxplot(width = 0.08, fill = "white",
-                             colour = "grey30", outlier.shape = NA) +
-      ggplot2::labs(subtitle = "Monthly distributions per component (violin + IQR)")
-
-  } else {   # density
-    # For density we switch to a rotated view with one density per component
-    p <- ggplot2::ggplot(df_long,
-                         ggplot2::aes(x = value, fill = component,
-                                      colour = component)) +
-      ggplot2::geom_density(alpha = 0.35, linewidth = 0.7) +
-      ggplot2::geom_vline(xintercept = 0, colour = "grey50",
-                          linetype = "dashed", linewidth = 0.4) +
-      ggplot2::scale_fill_manual(
-        values = colours,
-        name   = "Component",
-        labels = labels_map
-      ) +
-      ggplot2::scale_colour_manual(
-        values = colours,
-        name   = "Component",
-        labels = labels_map
-      ) +
-      ggplot2::labs(
-        title    = title,
-        subtitle = "Density curves of monthly component values",
-        x        = "Standardised value",
-        y        = "Density"
-      ) +
-      ggplot2::theme_minimal(base_size = 12) +
-      ggplot2::theme(
-        plot.title     = ggplot2::element_text(face = "bold"),
-        legend.position = "right",
-        panel.grid.minor = ggplot2::element_blank()
-      )
+    p <- p + ggplot2::geom_violin(alpha = 0.6, draw_quantiles = c(0.25, 0.5, 0.75))
+  } else {
+    p <- p + ggplot2::geom_density(alpha = 0.4)
   }
 
-  p
+  p +
+    ggplot2::scale_fill_manual(values   = colours[components],   guide = "none") +
+    ggplot2::scale_colour_manual(values = colours[components],   guide = "none") +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+    ggplot2::labs(
+      title    = title,
+      subtitle = subtitle,
+      x        = NULL,
+      y        = "Standardised anomaly"
+    ) +
+    ggplot2::theme_minimal(base_size = 12)
 }
 
 # ---------------------------------------------------------------------------

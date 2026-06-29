@@ -95,14 +95,16 @@ resample_daily <- function(dataset, FUN = sum) {
 #'
 #' Applies \code{FUN} within each calendar month.
 #'
-#' @param data  Either a 3-D array \code{[lon × lat × time]} or a numeric
-#'   vector of length \emph{T}.
-#' @param time  POSIXct vector of length \emph{T}.
-#' @param FUN   Aggregation function. Default \code{mean}.
+#' @param dataset List returned by \code{load_component()} or any component
+#'   function, with fields \code{data} (3-D array \code{[lon x lat x time]}
+#'   or numeric vector) and \code{time} (POSIXct vector).
+#' @param FUN Aggregation function. Default \code{mean}.
 #' @return A list with \code{data} (monthly aggregates) and \code{time}
 #'   (first day of each month as POSIXct).
 #' @export
-resample_monthly <- function(data, time, FUN = mean) {
+resample_monthly <- function(dataset, FUN = mean) {
+  data      <- dataset$data
+  time      <- dataset$time
   month_key <- format(time, "%Y-%m")
   months    <- unique(month_key)
   is_3d     <- length(dim(data)) == 3
@@ -125,4 +127,66 @@ resample_monthly <- function(data, time, FUN = mean) {
     data = out,
     time = as.POSIXct(paste0(months, "-01"), format = "%Y-%m-%d", tz = "UTC")
   )
+}
+
+
+#' Aggregate a 3-D climate array along the time dimension
+#'
+#' @param data  Numeric array \code{[nl x nw x nt]}.
+#' @param time  POSIXct vector of length \code{nt}.
+#' @param granularity One of \code{"month"}, \code{"season"},
+#'   \code{"semester"}, \code{"year"}.
+#' @param FUN  Aggregation function. Default \code{mean}.
+#' @return A list with \code{data} (array \code{[nl x nw x nt_agg]}),
+#'   and \code{time} (character vector of period labels, same convention
+#'   as \code{aggregate_granularity()}).
+#' @keywords internal
+.aggregate_granularity_array <- function(data, time,
+                                         granularity = "month",
+                                         FUN = mean) {
+  nl <- dim(data)[1]
+  nw <- dim(data)[2]
+  nt <- dim(data)[3]
+
+  # Construire les clés de période (même logique que aggregate_granularity)
+  keys <- switch(granularity,
+                 month    = format(time, "%Y-%m"),
+                 year     = format(time, "%Y"),
+                 semester = {
+                   yr  <- as.integer(format(time, "%Y"))
+                   mo  <- as.integer(format(time, "%m"))
+                   sem <- ifelse(mo <= 6L, 1L, 2L)
+                   sprintf("%d-S%d", yr, sem)
+                 },
+                 season = {
+                   yr  <- as.integer(format(time, "%Y"))
+                   mo  <- as.integer(format(time, "%m"))
+                   # Convention météorologique : DJF, MAM, JJA, SON
+                   # Décembre est attribué à l'année suivante
+                   season_key <- c("01" = "DJF", "02" = "DJF", "03" = "MAM",
+                                   "04" = "MAM", "05" = "MAM", "06" = "JJA",
+                                   "07" = "JJA", "08" = "JJA", "09" = "SON",
+                                   "10" = "SON", "11" = "SON", "12" = "DJF")
+                   seas <- season_key[sprintf("%02d", mo)]
+                   yr_adj <- ifelse(mo == 12L, yr + 1L, yr)
+                   sprintf("%d-%s", yr_adj, seas)
+                 },
+                 stop("'granularity' must be one of: 'month', 'year', 'semester', 'season'.")
+  )
+
+  periods <- unique(keys)
+  nt_agg  <- length(periods)
+  out     <- array(NA_real_, c(nl, nw, nt_agg))
+
+  for (k in seq_along(periods)) {
+    idx <- which(keys == periods[k])
+    if (length(idx) == 1L) {
+      out[, , k] <- data[, , idx]
+    } else {
+      out[, , k] <- apply(data[, , idx, drop = FALSE], c(1L, 2L),
+                          FUN, na.rm = TRUE)
+    }
+  }
+
+  list(data = out, time = periods)
 }

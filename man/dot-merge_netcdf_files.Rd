@@ -7,11 +7,11 @@
 .merge_netcdf_files(files, output, variable)
 }
 \arguments{
-\item{files}{Character vector of NetCDF paths to merge.}
+\item{files}{Character vector of NetCDF paths.}
 
-\item{output}{Output path for the merged file.}
+\item{output}{Output NetCDF file.}
 
-\item{variable}{Short variable name (\code{"t2m"}, \code{"tp"}, etc.).}
+\item{variable}{Variable name.}
 }
 \description{
 Merge multiple yearly NetCDF files along the time dimension

@@ -38,6 +38,33 @@ sealevel_load_data <- function(directory) {
   combined[, -1, drop = FALSE]
 }
 
+#' Load PSMSL station coordinates from the directory metadata
+#'
+#' PSMSL archives include a \code{filelist.txt} with one row per station:
+#' \code{id; lat; lon; name; ...}. This function reads it and returns a
+#' \code{data.frame} with columns \code{station_id}, \code{lon}, \code{lat}.
+#'
+#' @param directory Path to the PSMSL data directory.
+#' @return A \code{data.frame} with columns \code{station_id},
+#'   \code{lon}, \code{lat}.
+#' @keywords internal
+sealevel_load_metadata <- function(directory) {
+  meta_path <- file.path(directory, "filelist.txt")
+  if (!file.exists(meta_path))
+    stop("No filelist.txt found in: ", directory,
+         "\nExpected PSMSL archive format with filelist.txt.")
+  meta <- utils::read.table(meta_path, sep = ";", header = FALSE,
+                            col.names = c("id", "lat", "lon",
+                                          "name", "country", "flag"),
+                            colClasses = c("integer", "numeric", "numeric",
+                                           "character", "character",
+                                           "character"),
+                            fill = TRUE, strip.white = TRUE)
+  # Nom de colonne cohérent avec sealevel_load_data
+  meta$station_id <- paste0("Measurement_", meta$id)
+  meta[, c("station_id", "lon", "lat")]
+}
+
 #' Correct PSMSL float date format to Date objects
 #'
 #' PSMSL encodes dates as \code{YYYY.fraction} where the fraction
@@ -84,7 +111,7 @@ sealevel_clean_data <- function(df) {
 sealevel_compute_monthly_stats <- function(df, reference_period, stats) {
   dates    <- as.Date(rownames(df))
   ref_mask <- dates >= as.Date(reference_period[1]) &
-              dates <  as.Date(reference_period[2])
+              dates <=  as.Date(reference_period[2])
   df_ref   <- df[ref_mask, , drop = FALSE]
   row_mean <- rowMeans(df_ref, na.rm = TRUE)
   months   <- as.integer(format(as.Date(rownames(df_ref)), "%m"))
@@ -128,46 +155,91 @@ sealevel_standardize_data <- function(df, monthly_means, monthly_std_devs,
 #' @param directory        Path to the directory with PSMSL \code{.txt} files.
 #' @param study_period     Character vector \code{c("start", "end")}.
 #' @param reference_period Character vector \code{c("start", "end")}.
-#' @return A standardised \code{data.frame} of sea-level anomalies.
+#' @return A named list with:
+#'   \describe{
+#'     \item{\code{data}}{Standardised \code{data.frame} of anomalies
+#'       \code{[time x stations]}, row names \code{"YYYY-MM-DD"}.}
+#'     \item{\code{coords}}{A \code{data.frame} with columns
+#'       \code{station_id}, \code{lon}, \code{lat}, one row per station
+#'       present in \code{data}.}
+#'   }
 #' @export
 sealevel_process <- function(directory, study_period, reference_period) {
-  df <- sealevel_load_data(directory)
-  df <- sealevel_correct_date_format(df)
-  df <- sealevel_clean_data(df)
+  df      <- sealevel_load_data(directory)
+  df      <- sealevel_correct_date_format(df)
+  df      <- sealevel_clean_data(df)
+  coords  <- sealevel_load_metadata(directory)
+
+  # Garder uniquement les stations présentes dans df
+  coords <- coords[coords$station_id %in% colnames(df), , drop = FALSE]
+  # Aligner l'ordre sur les colonnes de df
+  coords <- coords[match(colnames(df), coords$station_id), , drop = FALSE]
+
   monthly_means <- sealevel_compute_monthly_stats(df, reference_period, "means")
   monthly_std   <- sealevel_compute_monthly_stats(df, reference_period, "std")
-  sealevel_standardize_data(df, monthly_means, monthly_std, study_period)
+  standardized  <- sealevel_standardize_data(df, monthly_means, monthly_std,
+                                             study_period)
+
+  list(data = standardized, coords = coords)
 }
 
 #' Calculate the sea-level component of the ACI
 #'
-#' Downloads PSMSL tide-gauge data for the given country, runs the full
-#' processing pipeline, and returns the regional mean standardised anomaly.
-#'
 #' @param country_abbrev   Three-letter country code (e.g. \code{"FRA"}).
 #' @param study_period     Character vector \code{c("start", "end")}.
 #' @param reference_period Character vector \code{c("start", "end")}.
+#' @param lon Numeric vector or \code{NULL}. ERA5 grid longitudes. If provided
+#'   together with \code{lat}, the standardised anomalies are interpolated onto
+#'   the ERA5 grid and a list with a \code{[lon x lat x time]} array is
+#'   returned. If \code{NULL} (default), the original station-level
+#'   \code{data.frame} is returned.
+#' @param lat Numeric vector or \code{NULL}. ERA5 grid latitudes.
+#' @param max_dist_km Numeric. Passed to \code{interpolate_sealevel_to_grid()}.
+#'   Default \code{500}.
+#' @param data_dir Character or \code{NULL}.
 #' @param admin_assignment Output of \code{assign_sealevel_to_admin()}, or
-#'   \code{NULL} (default) for national behaviour.
-#' @return If \code{admin_assignment} is \code{NULL}: a one-column
-#'   \code{data.frame} named \code{"sealevel"} indexed by month-start dates.
-#'   Otherwise: a \code{data.frame} with one column
-#'   \code{sealevel_<unit>} per administrative unit containing coastal
-#'   tide-gauge stations, indexed by month-start dates. Units without stations
-#'   are absent from the result.
+#'   \code{NULL}.
+#' @param save     Logical. Default \code{FALSE}.
+#' @param save_dir Character. Default \code{"results/<country_abbrev>"}.
+#' @return If \code{lon} and \code{lat} are provided: a list with \code{data}
+#'   (\code{[nl x nw x nt]} array), \code{lon}, \code{lat}, \code{time}.
+#'   Otherwise: a \code{data.frame} of station anomalies (national or per
+#'   administrative unit).
 #' @export
 sealevel_component <- function(country_abbrev, study_period, reference_period,
-                               admin_assignment = NULL) {
-  directory <- request_sealevel_data(country_abbrev)
-  raw       <- sealevel_process(directory, study_period, reference_period)
-
-  # --- Country level ---
-  if (is.null(admin_assignment)) {
-    return(reduce_sealevel_over_region(raw))
+                               lon             = NULL,
+                               lat             = NULL,
+                               max_dist_km     = 500,
+                               data_dir        = NULL,
+                               admin_assignment = NULL,
+                               save            = FALSE,
+                               save_dir         = paste("results/", country_abbrev, sep = "")) {
+  if (!is.null(data_dir) && dir.exists(data_dir)) {
+    directory <- data_dir
+  } else {
+    directory <- request_sealevel_data(country_abbrev, dest_dir = data_dir)
   }
 
-  # --- Administrative level specified ---
-  reduce_sealevel_over_region(raw, admin_assignment = admin_assignment)
+  raw <- sealevel_process(directory, study_period, reference_period)
+
+  if (save) {
+    ref_tag <- paste(substr(reference_period[1], 1, 4),
+                     substr(reference_period[2], 1, 4), sep = "_")
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    saveRDS(raw, file.path(save_dir, paste0("sealevel_", ref_tag, ".rds")))
+  }
+
+  # --- Mode grille ERA5 ---
+  if (!is.null(lon) && !is.null(lat)) {
+    return(interpolate_sealevel_to_grid(raw, lon, lat,
+                                        max_dist_km = max_dist_km))
+  }
+
+  # --- Mode station (national ou administratif) ---
+  if (is.null(admin_assignment)) {
+    return(reduce_sealevel_over_region(raw$data))
+  }
+  reduce_sealevel_over_region(raw$data, admin_assignment = admin_assignment)
 }
 
 #' Download PSMSL tide-gauge data for a country
@@ -177,14 +249,14 @@ sealevel_component <- function(country_abbrev, study_period, reference_period,
 #' website, and stores them locally.
 #'
 #' @param country_abbrev Three-letter ISO country code (e.g. \code{"FRA"}).
-#' @param dest_dir       Destination directory. Defaults to
-#'   \code{"data/sealevel_data_<country_abbrev>"}.
+#' @param dest_dir Destination directory. Defaults to
+#'   \code{"data/psmsl/<country_abbrev>"}.
 #' @return Invisibly, the path to the destination directory.
 #' @export
 request_sealevel_data <- function(country_abbrev,
                                    dest_dir = NULL) {
   if (is.null(dest_dir))
-    dest_dir <- file.path("data", paste0("sealevel_data_", country_abbrev))
+    dest_dir <- file.path("data", "psmsl", toupper(country_abbrev))
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   psmsl  <- load_psmsl_data()
@@ -243,14 +315,19 @@ request_sealevel_data <- function(country_abbrev,
 #' @importFrom rnaturalearth ne_states ne_coastline
 assign_sealevel_to_admin <- function(country_abbrev, admin_level = 1,
                                      crs_metric = 4326) {
+
+  if (admin_level != 1) {
+    stop("Only admin_level = 1 is currently supported.")
+  }
+
   psmsl <- load_psmsl_data()
-  psmsl <- psmsl[psmsl$country == country_abbrev, ]
+  psmsl <- psmsl[psmsl$Country == country_abbrev, ]
   if (nrow(psmsl) == 0)
     stop("No PSMSL stations found for country: ", country_abbrev)
 
   # Administrative polygons
   admin_sf <- rnaturalearth::ne_states(
-    country     = country_abbrev,
+    country     = .iso3_to_country_name(country_abbrev),
     returnclass = "sf"
   )
   admin_sf <- admin_sf[, c("name", "geometry")]
@@ -263,11 +340,16 @@ assign_sealevel_to_admin <- function(country_abbrev, admin_level = 1,
   coastline <- sf::st_transform(coastline, crs_metric)
   coastline <- sf::st_crop(coastline, sf::st_bbox(admin_sf))
 
-  # Spatial joint of stations -> administrative units (in WGS84)
+  # Spatial join of stations -> administrative units (in WGS84)
   stations_sf <- sf::st_as_sf(psmsl, coords = c("lon", "lat"), crs = 4326)
   stations_sf <- sf::st_transform(stations_sf, crs_metric)
-  joined      <- sf::st_join(stations_sf, admin_sf)
-  station_ids <- split(joined$id, joined$name)
+  idx <- sf::st_nearest_feature(stations_sf, admin_sf)
+  joined <- cbind(
+    stations_sf,
+    sf::st_drop_geometry(admin_sf[idx, ])
+  )
+#  joined      <- sf::st_join(stations_sf, admin_sf)
+  station_ids <- split(joined$ID, joined$name)
   station_ids <- station_ids[!sapply(station_ids, is.null)]
 
   # Coastline factor per administrative unit
@@ -293,5 +375,78 @@ assign_sealevel_to_admin <- function(country_abbrev, admin_level = 1,
   list(
     station_ids = station_ids,
     factors     = setNames(factors, admin_sf$name)
+  )
+}
+
+#' Interpolate tide-gauge sea-level values onto an ERA5 grid using IDW
+#'
+#' @param raw         List returned by \code{sealevel_process()}, with fields
+#'   \code{data} (standardised \code{data.frame} \code{[time x stations]}) and
+#'   \code{coords} (\code{data.frame} with \code{station_id}, \code{lon},
+#'   \code{lat}).
+#' @param lon         Numeric vector of grid longitudes (length nl).
+#' @param lat         Numeric vector of grid latitudes  (length nw).
+#' @param max_dist_km Numeric. Cells farther than this from every station
+#'   receive \code{NA}. Default \code{500}.
+#' @param power       Numeric. IDW power parameter. Default \code{2}.
+#' @return A list with \code{data} (array \code{[nl x nw x nt]}),
+#'   \code{lon}, \code{lat}, \code{time} (POSIXct).
+#' @keywords internal
+interpolate_sealevel_to_grid <- function(raw, lon, lat,
+                                         max_dist_km = 500,
+                                         power       = 2) {
+  df     <- raw$data
+  coords <- raw$coords
+  nt     <- nrow(df)
+  ns     <- nrow(coords)
+  nl     <- length(lon)
+  nw     <- length(lat)
+
+  if (ns == 0L)
+    stop("No station coordinates available for interpolation.")
+
+  # --- Géométries sf ---
+  grid_pts <- sf::st_as_sf(
+    expand.grid(lon = lon, lat = lat),
+    coords = c("lon", "lat"), crs = 4326
+  )
+  station_pts <- sf::st_as_sf(
+    coords[, c("lon", "lat")],
+    coords = c("lon", "lat"), crs = 4326
+  )
+
+  # --- Matrice de distances [n_cells x n_stations] en km ---
+  dist_km <- units::drop_units(
+    sf::st_distance(grid_pts, station_pts)
+  ) / 1000
+
+  # --- Poids IDW ---
+  dist_safe    <- ifelse(dist_km < 0.001, 0.001, dist_km)
+  weights_raw  <- 1 / dist_safe^power
+  weights_raw[dist_km > max_dist_km] <- 0
+
+  weight_sum   <- rowSums(weights_raw)
+  no_station   <- weight_sum == 0
+  weights_norm <- weights_raw / weight_sum
+  weights_norm[no_station, ] <- NA_real_
+
+  # --- Valeurs [ns x nt] ---
+  # Aligner les colonnes de df sur l'ordre de coords
+  val_mat <- t(as.matrix(df[, coords$station_id, drop = FALSE]))
+
+  # --- Interpolation matricielle [n_cells x nt] ---
+  interp_mat <- weights_norm %*% val_mat
+
+  # --- Reshape en array [nl x nw x nt] ---
+  out <- array(NA_real_, c(nl, nw, nt))
+  for (t in seq_len(nt)) {
+    out[, , t] <- matrix(interp_mat[, t], nrow = nl, ncol = nw)
+  }
+
+  list(
+    data = out,
+    lon  = lon,
+    lat  = lat,
+    time = as.POSIXct(rownames(df), format = "%Y-%m-%d", tz = "UTC")
   )
 }

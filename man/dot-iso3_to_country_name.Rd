@@ -13,9 +13,12 @@
 The corresponding English country name.
 }
 \description{
-Internal helper used by \code{build_admin_mask()} and
-\code{assign_sealevel_to_admin()} to translate \code{country_abbrev}
-(ISO-3, e.g. \code{"FRA"}) into the English name expected by
-\code{rnaturalearth::ne_states()}.
+Internal helper, kept for backward compatibility. As of the GADM-based
+\code{.load_admin_sf()}, administrative polygons are no longer fetched
+via \code{rnaturalearth::ne_states()} (which only exposes ONE fixed
+administrative level per country, ignoring \code{admin_level}), so this
+lookup is no longer used internally for that purpose. \code{ne_coastline()}
+(a separate, level-independent worldwide coastline layer used in
+\code{assign_sealevel_to_admin()}) does not need it either.
 }
 \keyword{internal}

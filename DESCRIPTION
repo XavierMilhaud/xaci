@@ -27,10 +27,14 @@ Imports:
     tidyr,
     sf,
     rnaturalearth,
+    geodata,
+    terra,
     units
 Suggests:
     testthat (>= 3.0.0),
     patchwork (>= 1.1.0),
     ecmwfr (>= 2.0.0),
-    rnaturalearthdata
+    rnaturalearthdata,
+    gganimate,
+    gifski
 RoxygenNote: 7.3.3

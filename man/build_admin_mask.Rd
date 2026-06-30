@@ -10,7 +10,8 @@ build_admin_mask(
   country_abbrev,
   admin_level = 1,
   resolution = 0.25,
-  crs_metric = 4326
+  crs_metric = 4326,
+  cache_dir = .gadm_cache_dir()
 )
 }
 \arguments{
@@ -20,8 +21,10 @@ build_admin_mask(
 
 \item{country_abbrev}{ISO-3 country code (e.g. \code{"FRA"}).}
 
-\item{admin_level}{Integer. Administrative level: \code{1} for regions,
-\code{2} for departments, etc. Default \code{1}.}
+\item{admin_level}{Integer >= 0. Administrative level fetched via GADM:
+\code{0} for the national boundary, \code{1} for regions, \code{2} for
+departments, etc. (availability depends on how finely GADM subdivides
+the given country). Default \code{1}.}
 
 \item{resolution}{Numeric. Half-width of ERA5 grid cells in degrees.
 Default \code{0.25}.}
@@ -30,6 +33,10 @@ Default \code{0.25}.}
 the country, used for accurate area calculations. Default \code{4326}
 (WGS84, not recommended for production — prefer a local CRS such as
 \code{2154} for France or \code{27700} for the UK).}
+
+\item{cache_dir}{Directory used to cache the downloaded GADM
+administrative boundaries. Default: a persistent per-user cache
+directory (see \code{tools::R_user_dir()}).}
 }
 \value{
 A list with elements:

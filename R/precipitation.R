@@ -10,7 +10,8 @@ NULL
 #' takes the monthly maximum.
 #'
 #' @param dataset     List returned by \code{load_component()} for \code{tp}.
-#' @param var_name    Variable name in \code{dataset}. Default \code{"tp"}.
+#' @param var_name    Variable name in \code{dataset}. Default \code{"tp"},
+#'                    inherited from ERA5 (variable name in the NetCDF).
 #' @param window_size Rolling window in days. Default \code{5}.
 #' @return A list with \code{data} [lon x lat x months] and \code{time}.
 #' @export
@@ -49,56 +50,69 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #' @param precipitation_data_path Path to the precipitation NetCDF file.
 #' @param mask_path               Path to the country mask NetCDF file, or
 #'   \code{NULL}.
+#' @param country_abbrev          Three-letter ISO country code.
 #' @param reference_period        Character vector \code{c("start", "end")}.
 #' @param var_name                Variable name in the NetCDF. Default
 #'   \code{"tp"}.
 #' @param window_size             Rolling window in days. Default \code{5}.
-#' @param area                    Logical. If \code{TRUE} return national
-#'   spatial mean as a named numeric vector. Ignored when \code{admin_mask}
-#'   is not \code{NULL}. Default \code{FALSE}.
+#' @param area                    Logical. Default \code{FALSE}.
+#' @param admin_level             Integer or \code{NULL}.
 #' @param admin_mask              Output of \code{build_admin_mask()}, or
-#'   \code{NULL} (default) for national behaviour.
-#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
-#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
-#' @param save_dir  Character. Directory for the cached \code{.rds} file.
-#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
-#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-#'   numeric vector (standardised monthly values).
-#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-#'   \code{data} [lon x lat x months] and \code{time}.
-#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-#'   column \code{precipitation_<unit>} per administrative unit, indexed by
-#'   month-start dates.
+#'   \code{NULL}.
+#' @param crs_metric              EPSG code. Default \code{4326}.
+#' @param computed_components     Logical. Default \code{FALSE}.
+#' @param save      Logical. Default \code{FALSE}.
+#' @param save_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @param load_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @return Named numeric vector, standardised list, or \code{data.frame}
+#'   per admin unit.
 #' @export
 precipitation_component <- function(precipitation_data_path,
-                                    mask_path        = NULL,
+                                    mask_path             = NULL,
+                                    country_abbrev,
                                     reference_period,
-                                    var_name         = "tp",
-                                    window_size      = 5L,
-                                    area             = FALSE,
-                                    admin_mask       = NULL,
-                                    save             = FALSE,
-                                    save_dir         = paste("results/",
-                                      strsplit(precipitation_data_path, "/", fixed = TRUE)[[1]][3],
-                                      sep = "")) {
+                                    var_name              = "tp",
+                                    window_size           = 5L,
+                                    area                  = FALSE,
+                                    admin_level           = NULL,
+                                    admin_mask            = NULL,
+                                    crs_metric            = 4326,
+                                    computed_components   = FALSE,
+                                    save                  = FALSE,
+                                    save_dir              = paste0("results/", country_abbrev),
+                                    load_dir              = paste0("results/", country_abbrev)) {
 
-  dataset    <- load_component(precipitation_data_path, var_name, mask_path)
-  period_max <- calculate_maximum_precipitation_over_window(dataset, var_name,
-                                                            window_size)
+  ref_tag <- paste(substr(reference_period[1], 1, 4),
+                   substr(reference_period[2], 1, 4), sep = "_")
 
-  if (save) {
-    ref_tag <- paste(substr(reference_period[1], 1, 4),
-                     substr(reference_period[2], 1, 4), sep = "_")
-    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-    saveRDS(period_max, file.path(save_dir, paste0("precipitation_", ref_tag, ".rds")))
+  if (computed_components) {
+    path <- file.path(load_dir, paste0("precipitation_", ref_tag, ".rds"))
+    if (!file.exists(path))
+      stop("Cached file not found: ", path,
+           "\nRun precipitation_component() with save = TRUE first.")
+    period_max <- readRDS(path)
+  } else {
+    dataset    <- load_component(precipitation_data_path, var_name, mask_path)
+    period_max <- calculate_maximum_precipitation_over_window(dataset, var_name,
+                                                              window_size)
+    if (save) {
+      dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+      saveRDS(period_max,
+              file.path(save_dir, paste0("precipitation_", ref_tag, ".rds")))
+    }
   }
 
-  # --- Country level ---
+  # Résolution du masque admin
+  if (is.null(admin_mask) && !is.null(admin_level)) {
+    tmp        <- load_component(precipitation_data_path, var_name, mask_path)
+    admin_mask <- build_admin_mask(tmp$lon, tmp$lat, country_abbrev,
+                                   admin_level, crs_metric)
+    rm(tmp)
+  }
+
   if (is.null(admin_mask)) {
     return(standardize_metric(period_max, reference_period, area))
   }
-
-  # --- Administrative level specified ---
   standardized <- standardize_metric(period_max, reference_period, area = FALSE)
   reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
                                 admin_mask = admin_mask)

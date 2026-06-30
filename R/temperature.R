@@ -146,91 +146,93 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
        lon = dataset$lon, lat = dataset$lat)
 }
 
-#' Calculate the full temperature component of the ACI in degrees Celsius
+#' Calculate the full temperature component of the ACI
 #'
 #' Combines day and night half-day components (equal weighting), then
 #' standardises relative to the reference period.
 #'
 #' @param temperature_data_path Path to the hourly \code{t2m} NetCDF file.
 #' @param mask_path             Path to the country mask NetCDF file.
+#' @param country_abbrev        Three-letter ISO country code.
 #' @param reference_period      Character vector \code{c("start", "end")}.
-#' @param percentile            Percentile for the threshold (90 or 10).
+#' @param percentile            Percentile for the threshold. Default \code{90}.
 #' @param extremum              \code{"max"} (hot) or \code{"min"} (cold).
-#' @param above_thresholds      Logical (see \code{calculate_halfday_component}).
-#' @param area                  Logical. If \code{TRUE} return national spatial
-#'   mean as a named numeric vector. Ignored when \code{admin_mask} is not
-#'   \code{NULL}. Default \code{FALSE}.
+#' @param above_thresholds      Logical. Default \code{TRUE}.
+#' @param area                  Logical. Default \code{FALSE}.
+#' @param admin_level           Integer or \code{NULL}.
 #' @param admin_mask            Output of \code{build_admin_mask()}, or
-#'   \code{NULL} (default) for national behaviour.
-#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
-#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
-#' @param save_dir  Character. Directory for the cached \code{.rds} file.
-#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
-#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-#'   numeric vector (standardised monthly values).
-#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-#'   \code{data} [lon x lat x months] and \code{time}.
-#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-#'   column \code{t90_<unit>} (or \code{t10_<unit>}) per administrative unit,
-#'   indexed by month-start dates.
+#'   \code{NULL}.
+#' @param crs_metric            EPSG code. Default \code{4326}.
+#' @param computed_components   Logical. Default \code{FALSE}.
+#' @param save      Logical. Default \code{FALSE}.
+#' @param save_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @param load_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @return Named numeric vector, standardised list, or \code{data.frame}
+#'   per admin unit.
 #' @export
-temperature_component <- function(temperature_data_path, mask_path,
+temperature_component <- function(temperature_data_path,
+                                  mask_path             = NULL,
+                                  country_abbrev,
                                   reference_period,
-                                  percentile       = 90,
-                                  extremum         = "max",
-                                  above_thresholds = TRUE,
-                                  area             = FALSE,
-                                  admin_mask       = NULL,
-                                  save             = FALSE,
-                                  save_dir         = paste("results/",
-                                    strsplit(temperature_data_path, "/", fixed = TRUE)[[1]][3],
-                                    sep = "")) {
+                                  percentile            = 90,
+                                  extremum              = "max",
+                                  above_thresholds      = TRUE,
+                                  area                  = FALSE,
+                                  admin_level           = NULL,
+                                  admin_mask            = NULL,
+                                  crs_metric            = 4326,
+                                  computed_components   = FALSE,
+                                  save                  = FALSE,
+                                  save_dir              = paste0("results/", country_abbrev),
+                                  load_dir              = paste0("results/", country_abbrev)) {
 
-  dataset <- load_component(temperature_data_path, "t2m", mask_path)
-  # Conversion Kelvin -> Celsius
-  dataset$data <- dataset$data - 273.15
+  ref_tag <- paste(substr(reference_period[1], 1, 4),
+                   substr(reference_period[2], 1, 4), sep = "_")
+  label   <- if (above_thresholds) "temperature_highs" else "temperature_lows"
 
-  day_comp   <- calculate_halfday_component(dataset, reference_period, "day",
-                                            extremum, percentile,
-                                            above_thresholds)
-  night_comp <- calculate_halfday_component(dataset, reference_period, "night",
-                                            extremum, percentile,
-                                            above_thresholds)
+  if (computed_components) {
+    path <- file.path(load_dir, paste0(label, "_", ref_tag, ".rds"))
+    if (!file.exists(path))
+      stop("Cached file not found: ", path,
+           "\nRun temperature_component() with save = TRUE first.")
+    combined <- readRDS(path)
+  } else {
+    dataset      <- load_component(temperature_data_path, "t2m", mask_path)
+    dataset$data <- dataset$data - 273.15   # Kelvin -> Celsius
 
-  # Mean day/night
-  combined <- list(
-    data = 0.5 * (day_comp$data + night_comp$data),
-    time = day_comp$time,
-    lon  = dataset$lon,
-    lat  = dataset$lat
-  )
+    day_comp   <- calculate_halfday_component(dataset, reference_period, "day",
+                                              extremum, percentile,
+                                              above_thresholds)
+    night_comp <- calculate_halfday_component(dataset, reference_period, "night",
+                                              extremum, percentile,
+                                              above_thresholds)
+    combined <- list(
+      data = 0.5 * (day_comp$data + night_comp$data),
+      time = day_comp$time,
+      lon  = dataset$lon,
+      lat  = dataset$lat
+    )
 
-  # Save highest resolution computed data (possibly useful for reuse at different spatial/time resolution)
-  if (save) {
-    ref_tag  <- paste(substr(reference_period[1], 1, 4),
-                      substr(reference_period[2], 1, 4), sep = "_")
-    label    <- if (above_thresholds) "temperature_highs" else "temperature_lows"
-    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-    saveRDS(combined, file.path(save_dir, paste0(label, "_", ref_tag, ".rds")))
-  }
-
-  # Standardization
-  standardized <- standardize_metric(combined, reference_period, area = FALSE)
-
-  # --- Country level ---
-  if (is.null(admin_mask)) {
-    if (area) {
-      # National spatial mean
-      return(standardize_metric(combined, reference_period, area = TRUE))
-    } else {
-      # ERA5 Grid cell level (NUTS)
-      return(standardized)
+    if (save) {
+      dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+      saveRDS(combined,
+              file.path(save_dir, paste0(label, "_", ref_tag, ".rds")))
     }
   }
 
-  # --- Administrative level specified ---
-  #col_prefix <- if (percentile == 90) "t90" else "t10"
-  col_prefix <- sprintf("t%d", as.integer(percentile))
+  # Résolution du masque admin
+  if (is.null(admin_mask) && !is.null(admin_level)) {
+    tmp        <- load_component(temperature_data_path, "t2m", mask_path)
+    admin_mask <- build_admin_mask(tmp$lon, tmp$lat, country_abbrev,
+                                   admin_level, crs_metric)
+    rm(tmp)
+  }
+
+  if (is.null(admin_mask)) {
+    return(standardize_metric(combined, reference_period, area))
+  }
+  col_prefix   <- sprintf("t%d", as.integer(percentile))
+  standardized <- standardize_metric(combined, reference_period, area = FALSE)
   reduce_dataarray_to_dataframe(standardized, column_name = col_prefix,
                                 admin_mask = admin_mask)
 }

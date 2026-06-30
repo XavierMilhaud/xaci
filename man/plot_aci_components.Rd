@@ -13,7 +13,8 @@ plot_aci_components(
 )
 }
 \arguments{
-\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}.}
+\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
+with \code{area = TRUE}}
 
 \item{type}{\code{"facet"} (default) or \code{"stacked"}.}
 
@@ -29,8 +30,8 @@ the title. Default \code{NULL}.}
 A \code{ggplot} object.
 }
 \description{
-Produces either a \strong{faceted line chart} (one panel per component,
-\code{type = "facet"}) or a \strong{stacked area chart}
+Produces either a \strong{bar chart} (one panel per component,
+\code{type = "bar"}) or a \strong{stacked area chart}
 (\code{type = "stacked"}) showing the six standardised components that
 make up the ACI.
 }

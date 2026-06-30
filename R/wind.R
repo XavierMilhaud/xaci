@@ -141,51 +141,65 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
 #' @param wind_v10_data_path Path to the v10 NetCDF file.
 #' @param mask_path          Path to the country mask NetCDF file, or
 #'   \code{NULL}.
+#' @param country_abbrev     Three-letter ISO country code.
 #' @param reference_period   Character vector \code{c("start", "end")}.
-#' @param area               Logical. If \code{TRUE} return national spatial
-#'   mean as a named numeric vector. Ignored when \code{admin_mask} is not
-#'   \code{NULL}. Default \code{FALSE}.
+#' @param area               Logical. Default \code{FALSE}.
+#' @param admin_level        Integer or \code{NULL}.
 #' @param admin_mask         Output of \code{build_admin_mask()}, or
-#'   \code{NULL} (default) for national behaviour.
-#' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
-#'   to \code{save_dir} before aggregation. Default \code{FALSE}.
-#' @param save_dir  Character. Directory for the cached \code{.rds} file.
-#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
-#' @return If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-#'   numeric vector (standardised monthly values).
-#'   If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-#'   \code{data} [lon x lat x months] and \code{time}.
-#'   If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-#'   column \code{wind_<unit>} per administrative unit, indexed by
-#'   month-start dates.
+#'   \code{NULL}.
+#' @param crs_metric         EPSG code. Default \code{4326}.
+#' @param computed_components Logical. Default \code{FALSE}.
+#' @param save      Logical. Default \code{FALSE}.
+#' @param save_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @param load_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @return Named numeric vector, standardised list, or \code{data.frame}
+#'   per admin unit.
 #' @export
-wind_component <- function(wind_u10_data_path, wind_v10_data_path,
-                           mask_path        = NULL,
+wind_component <- function(wind_u10_data_path,
+                           wind_v10_data_path,
+                           mask_path             = NULL,
+                           country_abbrev,
                            reference_period,
-                           area             = FALSE,
-                           admin_mask       = NULL,
-                           save             = FALSE,
-                           save_dir         = paste("results/",
-                            strsplit(wind_u10_data_path, "/", fixed = TRUE)[[1]][3],
-                            sep = "")) {
+                           area                  = FALSE,
+                           admin_level           = NULL,
+                           admin_mask            = NULL,
+                           crs_metric            = 4326,
+                           computed_components   = FALSE,
+                           save                  = FALSE,
+                           save_dir              = paste0("results/", country_abbrev),
+                           load_dir              = paste0("results/", country_abbrev)) {
 
-  u10  <- load_component(wind_u10_data_path, "u10", mask_path)
-  v10  <- load_component(wind_v10_data_path, "v10", mask_path)
-  freq <- calculate_period_wind_exceedance_frequency(u10, v10, reference_period)
+  ref_tag <- paste(substr(reference_period[1], 1, 4),
+                   substr(reference_period[2], 1, 4), sep = "_")
 
-  if (save) {
-    ref_tag <- paste(substr(reference_period[1], 1, 4),
-                     substr(reference_period[2], 1, 4), sep = "_")
-    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-    saveRDS(freq, file.path(save_dir, paste0("wind_", ref_tag, ".rds")))
+  if (computed_components) {
+    path <- file.path(load_dir, paste0("wind_", ref_tag, ".rds"))
+    if (!file.exists(path))
+      stop("Cached file not found: ", path,
+           "\nRun wind_component() with save = TRUE first.")
+    freq <- readRDS(path)
+  } else {
+    u10  <- load_component(wind_u10_data_path, "u10", mask_path)
+    v10  <- load_component(wind_v10_data_path, "v10", mask_path)
+    freq <- calculate_period_wind_exceedance_frequency(u10, v10,
+                                                       reference_period)
+    if (save) {
+      dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+      saveRDS(freq, file.path(save_dir, paste0("wind_", ref_tag, ".rds")))
+    }
   }
 
-  # --- Country level ---
+  # Résolution du masque admin
+  if (is.null(admin_mask) && !is.null(admin_level)) {
+    tmp        <- load_component(wind_u10_data_path, "u10", mask_path)
+    admin_mask <- build_admin_mask(tmp$lon, tmp$lat, country_abbrev,
+                                   admin_level, crs_metric)
+    rm(tmp)
+  }
+
   if (is.null(admin_mask)) {
     return(standardize_metric(freq, reference_period, area))
   }
-
-  # --- Administrative level specified ---
   standardized <- standardize_metric(freq, reference_period, area = FALSE)
   reduce_dataarray_to_dataframe(standardized, column_name = "wind",
                                 admin_mask = admin_mask)

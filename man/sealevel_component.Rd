@@ -8,13 +8,17 @@ sealevel_component(
   country_abbrev,
   study_period,
   reference_period,
-  lon = NULL,
-  lat = NULL,
+  mask_path = NULL,
+  grid_cell = FALSE,
   max_dist_km = 500,
-  data_dir = NULL,
+  data_dir = paste0("data/psmsl/", country_abbrev),
+  admin_level = NULL,
   admin_assignment = NULL,
+  crs_metric = 4326,
+  computed_components = FALSE,
   save = FALSE,
-  save_dir = paste("results/", country_abbrev, sep = "")
+  save_dir = paste0("results/", country_abbrev),
+  load_dir = paste0("results/", country_abbrev)
 )
 }
 \arguments{
@@ -24,31 +28,43 @@ sealevel_component(
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
-\item{lon}{Numeric vector or \code{NULL}. ERA5 grid longitudes. If provided
-together with \code{lat}, the standardised anomalies are interpolated onto
-the ERA5 grid and a list with a \code{[lon x lat x time]} array is
-returned. If \code{NULL} (default), the original station-level
-\code{data.frame} is returned.}
+\item{mask_path}{Path to the country mask NetCDF. Used to extract the
+ERA5 grid when \code{grid_cell = TRUE}.}
 
-\item{lat}{Numeric vector or \code{NULL}. ERA5 grid latitudes.}
+\item{grid_cell}{Logical. If \code{TRUE}, interpolates the standardised
+anomalies onto the ERA5 grid and returns a list with a
+\code{[nl x nw x nt]} array — consistent with all other component
+functions. If \code{FALSE} (default), returns a \code{data.frame} of
+station anomalies (national or per admin unit).}
 
-\item{max_dist_km}{Numeric. Passed to \code{interpolate_sealevel_to_grid()}.
-Default \code{500}.}
+\item{max_dist_km}{Numeric. Maximum distance (km) for IDW interpolation.
+Only used when \code{grid_cell = TRUE}. Default \code{500}.}
 
-\item{data_dir}{Character or \code{NULL}.}
+\item{data_dir}{Character or \code{NULL}. Path to PSMSL \code{.txt}
+files. If \code{NULL}, data are downloaded automatically.}
+
+\item{admin_level}{Integer or \code{NULL}. If not \code{NULL}, returns one
+column per admin unit. Ignored when \code{admin_assignment} is supplied.}
 
 \item{admin_assignment}{Output of \code{assign_sealevel_to_admin()}, or
-\code{NULL}.}
+\code{NULL}. When supplied, takes precedence over \code{admin_level}.}
+
+\item{crs_metric}{EPSG code used when building \code{admin_assignment}
+internally. Default \code{4326}.}
+
+\item{computed_components}{Logical. Default \code{FALSE}.}
 
 \item{save}{Logical. Default \code{FALSE}.}
 
 \item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+
+\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{lon} and \code{lat} are provided: a list with \code{data}
-  (\code{[nl x nw x nt]} array), \code{lon}, \code{lat}, \code{time}.
-  Otherwise: a \code{data.frame} of station anomalies (national or per
-  administrative unit).
+If \code{grid_cell = TRUE}: list with array
+  \code{[nl x nw x nt]}, \code{lon}, \code{lat}, \code{time}.
+  Otherwise: \code{data.frame} of station anomalies (national or per
+  admin unit).
 }
 \description{
 Calculate the sea-level component of the ACI

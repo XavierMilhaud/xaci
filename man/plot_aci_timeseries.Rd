@@ -14,9 +14,9 @@ plot_aci_timeseries(
 )
 }
 \arguments{
-\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}.
-Must contain at least the column \code{ACI} and have month-end dates as
-row names.}
+\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
+with \code{area = TRUE}. Must contain at least the column \code{ACI} and
+have month-end dates as row names.}
 
 \item{smooth}{Logical. If \code{TRUE} (default), a LOESS smoothing
 curve is overlaid in red.}
@@ -36,8 +36,8 @@ A \code{ggplot} object.
 }
 \description{
 Draws a line chart of the monthly ACI values returned by
-\code{\link{calculate_aci}}, with an optional smoothed trend and a
-horizontal zero reference line.
+\code{\link{calculate_aci}}, with an optional smoothed
+trend and a horizontal zero reference line.
 }
 \examples{
 \dontrun{

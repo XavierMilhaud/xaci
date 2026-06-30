@@ -13,7 +13,7 @@ A collection of ggplot2-based plotting functions to visualize
       (\code{plot_aci_components})
     \item \strong{Geographic maps} from a NetCDF-derived array
       (\code{plot_aci_map})
-    \item \strong{Distribution plots} – boxplots and density ridges
+    \item \strong{Distribution plots} - boxplots and density ridges
       (\code{plot_aci_distribution})
   }
 }

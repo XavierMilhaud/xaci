@@ -7,12 +7,16 @@
 drought_component(
   precipitation_data_path,
   mask_path = NULL,
+  country_abbrev,
   reference_period,
   area = FALSE,
+  admin_level = NULL,
   admin_mask = NULL,
+  crs_metric = 4326,
+  computed_components = FALSE,
   save = FALSE,
-  save_dir = paste("results/", strsplit(precipitation_data_path, "/", fixed =
-    TRUE)[[1]][3], sep = "")
+  save_dir = paste0("results/", country_abbrev),
+  load_dir = paste0("results/", country_abbrev)
 )
 }
 \arguments{
@@ -21,29 +25,41 @@ drought_component(
 \item{mask_path}{Path to the country mask NetCDF file, or
 \code{NULL}.}
 
+\item{country_abbrev}{Three-letter ISO country code (e.g.
+\code{"FRA"}). Used to build \code{save_dir}/\code{load_dir} defaults
+and to construct the admin mask when \code{admin_level} is not
+\code{NULL}.}
+
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
 \item{area}{Logical. If \code{TRUE} return national
-spatial mean as a named numeric vector. Ignored when \code{admin_mask}
-is not \code{NULL}. Default \code{FALSE}.}
+spatial mean as a named numeric vector. Ignored when \code{admin_level}
+or \code{admin_mask} is not \code{NULL}. Default \code{FALSE}.}
+
+\item{admin_level}{Integer or \code{NULL}. If not \code{NULL},
+builds the admin mask internally and returns one column per unit.
+Ignored when \code{admin_mask} is supplied directly.}
 
 \item{admin_mask}{Output of \code{build_admin_mask()}, or
-\code{NULL} (default) for national behaviour.}
+\code{NULL}. When supplied, takes precedence over \code{admin_level}
+(no rebuild).}
 
-\item{save}{Logical. If \code{TRUE}, saves the grid-cell-level object
-to \code{save_dir} before aggregation. Default \code{FALSE}.}
+\item{crs_metric}{EPSG code for the metric CRS used when
+building the admin mask. Default \code{4326}.}
 
-\item{save_dir}{Character. Directory for the cached \code{.rds} file.
-Created if it does not exist. Default \code{"results/<country_abbrev>"}.}
+\item{computed_components}{Logical. If \code{TRUE}, reloads a
+previously saved \code{.rds} file from \code{load_dir} instead of
+recomputing. Default \code{FALSE}.}
+
+\item{save}{Logical. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+
+\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-  numeric vector (standardised monthly values).
-  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-  \code{data} [lon x lat x months] and \code{time}.
-  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-  column \code{drought_<unit>} per administrative unit, indexed by
-  month-start dates.
+Named numeric vector (\code{area = TRUE}), standardised list
+  (\code{area = FALSE}), or \code{data.frame} per admin unit.
 }
 \description{
 Computes standardised consecutive dry days.

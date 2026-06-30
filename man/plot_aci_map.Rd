@@ -2,57 +2,103 @@
 % Please edit documentation in R/visualization.R
 \name{plot_aci_map}
 \alias{plot_aci_map}
-\title{Plot a geographic map of a climate variable from a xaci dataset list}
+\title{Plot a spatial map of the ACI or one of its components}
 \usage{
 plot_aci_map(
-  dataset,
+  data,
+  variable = "ACI",
   time_index = "mean",
-  var_label = "Value",
-  title = "Spatial Distribution",
+  country_abbrev = NULL,
+  admin_level = NULL,
+  crs_metric = NULL,
+  var_label = "Standardised anomaly",
+  title = "ACI Spatial Distribution",
   palette = "RdBu",
   reverse = TRUE,
-  n_breaks = 9
+  n_breaks = 9,
+  borders = TRUE
 )
 }
 \arguments{
-\item{dataset}{A list with elements \code{data} (3-D array
-\code{[lon × lat × time]}), \code{lon}, \code{lat}, and \code{time}.}
+\item{data}{A bare array (component or ACI, with attributes), a
+named list (grid-cell / raw dataset), or a \code{data.frame} (admin
+output).}
 
-\item{time_index}{Either an integer (time slice index) or \code{"mean"}
-(default) to plot the temporal average.}
+\item{variable}{Name of the variable to map when \code{data} is a
+list. For grid-cell output use e.g. \code{"ACI"}, \code{"drought"},
+\code{"t90"}. For admin output use \code{"ACI"} (columns must be named
+\code{ACI_<unit>}). Ignored when \code{data} is already a bare array.
+Default \code{"ACI"}.}
 
-\item{var_label}{Label for the colour bar. Default \code{"Value"}.}
+\item{time_index}{Integer (1-based time slice) or \code{"mean"} (default)
+to plot the temporal average.}
 
-\item{title}{Plot title.}
+\item{country_abbrev}{Three-letter ISO code. Required for admin maps and
+for overlaying country/region borders on raster maps. If \code{NULL}
+and \code{data} carries a \code{country_abbrev} attribute (as set by
+\code{calculate_aci()}), that value is used automatically.}
 
-\item{palette}{RColorBrewer palette name or a vector of colours.
-Default \code{"RdBu"} (diverging).}
+\item{admin_level}{Integer or \code{NULL}. Required for admin maps; read
+from \code{data}'s attributes when not supplied.}
 
-\item{reverse}{Logical. Reverse the colour scale? Default \code{TRUE}
-(so that blue = cold/low, red = warm/high for "RdBu").}
+\item{crs_metric}{EPSG code used for admin choropleth projection only.
+If \code{NULL}, read from \code{data}'s attributes, falling back to
+\code{4326}. Ignored (with a warning if explicitly set) in raster
+(grid-cell) mode: the grid-cell data stays in its native EPSG:4326
+(lon/lat), since reprojecting a fixed regular raster to a different
+CRS would distort/break it; the basemap is reprojected to 4326 to
+match it instead.}
 
-\item{n_breaks}{Number of colour-scale breaks. Default \code{9}.}
+\item{var_label}{Colour-bar label. Default \code{"Standardised anomaly"}.}
+
+\item{title}{Plot title. Default \code{"ACI Spatial Distribution"}.}
+
+\item{palette}{RColorBrewer palette. Default \code{"RdBu"}.}
+
+\item{reverse}{Logical. Reverse colour scale? Default \code{TRUE}.}
+
+\item{n_breaks}{Number of colour breaks. Default \code{9}.}
+
+\item{borders}{Logical. Overlay administrative borders? Default
+\code{TRUE}.}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
-Renders a spatial snapshot (one time slice or the time-mean) of any
-variable stored in a xaci \emph{dataset list} (as returned by
-\code{\link{load_component}} or a component function with \code{area = FALSE}).
-Requires the \pkg{ggplot2} and \pkg{sf} packages (only \pkg{ggplot2} is
-hard-required; the function works without \pkg{sf} using
-\code{coord_quickmap}).
+Handles three types of input, at any spatial aggregation level produced
+by \code{calculate_aci()} (grid-cell, admin level 1, admin level 2, ...):
+\itemize{
+  \item \strong{Bare array} (e.g. \code{grid$t90}, \code{grid$ACI}): a
+    single component array as stored in the grid-cell list returned by
+    \code{calculate_aci(area = FALSE)}. Self-describing via its attached
+    \code{lon}/\code{lat}/\code{time}/\code{country_abbrev} attributes, so
+    it can be passed on its own. Renders a raster map. Since \code{ACI}
+    and its components share the exact same array structure, this works
+    identically whether \code{variable} is a component or the ACI itself.
+  \item \strong{Grid-cell list} (the full output of
+    \code{calculate_aci(area = FALSE)}, or of \code{load_component()}):
+    \code{variable} selects which field of the list to map. Renders a
+    raster map.
+  \item \strong{Administrative} \code{data.frame} (output of
+    \code{calculate_aci(admin_level = N)}): renders a choropleth map.
+    \code{country_abbrev}/\code{admin_level}/\code{crs_metric} are read
+    from the data.frame's attributes when not supplied explicitly.
+}
 }
 \examples{
 \dontrun{
-# Either maps precipitation from original dataset:
-#ds <- load_component("data/era5/FRA/tp_2011_2015.nc", "tp",
-#                     mask_path = "data/era5/FRA/mask_FRA.nc")
-# Or maps precipitation from the created precipitation component of the ACI:
-ds <- readRDS("results/FRA/precipitation_2011_2013.rds")
-plot_aci_map(ds, time_index = "mean", var_label = "Precipitation (unit?)",
-             title = "Mean precipitation")
+grid <- calculate_aci(..., area = FALSE)
+
+# Bare array, self-describing thanks to its attributes
+plot_aci_map(grid$t90, time_index = "mean")
+
+# Equivalent, via the parent list and `variable`
+plot_aci_map(grid, variable = "t90", time_index = "mean")
+
+# Admin choropleth: country_abbrev/admin_level read from attributes
+admin <- calculate_aci(..., admin_level = 1)
+plot_aci_map(admin, variable = "ACI", time_index = 1)
 }
 
 }

@@ -10,7 +10,10 @@ assign_sealevel_to_admin(country_abbrev, admin_level = 1, crs_metric = 4326)
 \arguments{
 \item{country_abbrev}{ISO-3 country code (e.g. \code{"FRA"}).}
 
-\item{admin_level}{Integer. Administrative level. Default \code{1}.}
+\item{admin_level}{Integer >= 0. Administrative level fetched via
+GADM (see \code{.load_admin_sf()} in \code{utils.R}): \code{0} for the
+national boundary, \code{1} for regions, \code{2} for departments, etc.
+Default \code{1}.}
 
 \item{crs_metric}{Integer. EPSG code of a metric CRS appropriate for
 the country, used for accurate length calculations. Default \code{4326}

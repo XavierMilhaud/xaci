@@ -142,8 +142,15 @@ Default \code{FALSE}.}
       plus \code{lon}, \code{lat}, and \code{time} (character vector of
       period labels at the chosen granularity).}
     \item{Administrative (\code{admin_level} integer)}{
-      A \code{data.frame} with one \code{ACI_<unit>} column per
-      administrative unit, indexed by dates at the chosen granularity.}
+      A \code{data.frame} indexed by dates at the chosen granularity,
+      with one \code{<component>_<unit>} column per administrative unit
+      FOR EACH component (\code{ACI}, \code{t<percentile_high>},
+      \code{t<percentile_low>}, \code{precipitation}, \code{drought},
+      \code{wind}, \code{sealevel}) -- e.g. \code{ACI_<unit>},
+      \code{t90_<unit>}, \code{precipitation_<unit>}, etc. This mirrors
+      the grid-cell mode's per-component structure, and lets
+      \code{plot_aci_map()} plot any individual component at admin level,
+      not just \code{ACI} itself.}
   }
 }
 \description{

@@ -38,10 +38,13 @@ NULL
 
 #' Convert an ISO-3 country code to its English name for rnaturalearth
 #'
-#' Internal helper used by \code{build_admin_mask()} and
-#' \code{assign_sealevel_to_admin()} to translate \code{country_abbrev}
-#' (ISO-3, e.g. \code{"FRA"}) into the English name expected by
-#' \code{rnaturalearth::ne_states()}.
+#' Internal helper, kept for backward compatibility. As of the GADM-based
+#' \code{.load_admin_sf()}, administrative polygons are no longer fetched
+#' via \code{rnaturalearth::ne_states()} (which only exposes ONE fixed
+#' administrative level per country, ignoring \code{admin_level}), so this
+#' lookup is no longer used internally for that purpose. \code{ne_coastline()}
+#' (a separate, level-independent worldwide coastline layer used in
+#' \code{assign_sealevel_to_admin()}) does not need it either.
 #'
 #' @param iso3 A single ISO-3 character string (case-insensitive).
 #' @return The corresponding English country name.
@@ -55,6 +58,84 @@ NULL
       "Please add it to the .iso3_to_ne_name table in utils.R."
     )
   unname(name)
+}
+
+#' Default on-disk cache directory for GADM administrative boundaries
+#' @noRd
+.gadm_cache_dir <- function() {
+  dir <- tools::R_user_dir("xaci", which = "cache")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  dir
+}
+
+#' Load administrative boundary polygons for a country, at a given level
+#'
+#' Replaces the former \code{rnaturalearth::ne_states()}-based approach,
+#' which only ever exposed a single fixed administrative level per country
+#' (so \code{admin_level} had no real effect downstream, regardless of the
+#' value supplied). Uses GADM (via \code{geodata::gadm()}), which provides a
+#' genuine multi-level administrative hierarchy for virtually every country
+#' (level 0 = national boundary, level 1 = states/regions, level 2 =
+#' departments/counties, etc., depending on how finely each country is
+#' subdivided in GADM).
+#'
+#' GADM keys countries directly by their ISO-3 code, so no name-lookup
+#' table is needed (unlike \code{rnaturalearth::ne_states()}, which expected
+#' English country names and required maintaining \code{.iso3_to_ne_name}).
+#'
+#' Downloads are cached on disk (\code{cache_dir}, by default a persistent
+#' per-user cache via \code{tools::R_user_dir()}), so repeated calls for the
+#' same country/level across \code{build_admin_mask()},
+#' \code{assign_sealevel_to_admin()}, and the plotting helpers do not
+#' re-download the data.
+#'
+#' @param country_abbrev ISO-3 country code (e.g. \code{"FRA"}).
+#' @param admin_level    Integer >= 0. \code{0} = country boundary,
+#'   \code{1} = first administrative subdivision, etc. Must not exceed what
+#'   GADM provides for that country (GADM returns an error/empty result
+#'   otherwise).
+#' @param cache_dir      Directory used to cache the downloaded GADM data.
+#'   Default: a persistent per-user cache directory.
+#' @return An \code{sf} object with columns \code{name} (administrative
+#'   unit name at the requested level) and \code{geometry}, in EPSG:4326.
+#' @keywords internal
+.load_admin_sf <- function(country_abbrev, admin_level = 1,
+                           cache_dir = .gadm_cache_dir()) {
+  if (!requireNamespace("geodata", quietly = TRUE))
+    stop("Package 'geodata' is required for multi-level administrative ",
+         "boundaries (admin_level support). Install it with ",
+         "install.packages('geodata').")
+  if (!requireNamespace("terra", quietly = TRUE))
+    stop("Package 'terra' is required (dependency of 'geodata').")
+
+  country_abbrev <- toupper(trimws(country_abbrev))
+  admin_level     <- as.integer(admin_level)
+  if (is.na(admin_level) || admin_level < 0L)
+    stop("`admin_level` must be a non-negative integer (0 = country, ",
+         "1 = first subdivision, ...).")
+
+  gadm_v <- geodata::gadm(country = country_abbrev, level = admin_level,
+                          path = cache_dir)
+  admin_sf <- sf::st_as_sf(gadm_v)
+
+  # GADM names the unit-name column "NAME_<level>" for level >= 1, but
+  # uses "COUNTRY" (not "NAME_0") at level 0.
+  name_col <- if (admin_level == 0L) {
+    if ("COUNTRY" %in% names(admin_sf)) "COUNTRY" else "NAME_0"
+  } else {
+    paste0("NAME_", admin_level)
+  }
+  if (!name_col %in% names(admin_sf))
+    stop("GADM level ", admin_level, " for '", country_abbrev, "' does not ",
+         "expose a '", name_col, "' column; this country may not be ",
+         "subdivided that finely in GADM. Available columns: ",
+         paste(names(admin_sf), collapse = ", "))
+
+  admin_sf$name <- admin_sf[[name_col]]
+  admin_sf <- admin_sf[, c("name", "geometry")]
+
+  if (is.na(sf::st_crs(admin_sf))) admin_sf <- sf::st_set_crs(admin_sf, 4326)
+  admin_sf
 }
 
 #' Build standard ERA5 file paths from country and years
@@ -374,7 +455,16 @@ aggregate_granularity <- function(df, granularity = "month") {
   )
 
   df$..group.. <- group_key
-  agg <- aggregate(. ~ ..group.., data = df, FUN = mean, na.rm = TRUE)
+  # na.action = na.pass : par defaut, aggregate() avec l'interface formule
+  # supprime TOUTE la ligne des qu'UNE SEULE colonne contient un NA (meme
+  # comportement que lm()/na.omit). Avec plusieurs colonnes independantes
+  # (ex: une par composante x unite administrative), une seule colonne
+  # frequemment NA (ex: sealevel pour une unite non cotiere) suffirait a
+  # vider quasiment tout le resultat. na.action = na.pass desactive cette
+  # suppression de ligne ; na.rm = TRUE (dans FUN = mean) continue de gerer
+  # les NA proprement, mais colonne par colonne.
+  agg <- aggregate(. ~ ..group.., data = df, FUN = mean, na.rm = TRUE,
+                   na.action = na.pass)
   rownames(agg) <- agg$`..group..`
   agg$`..group..` <- NULL
   agg[order(rownames(agg)), , drop = FALSE]
@@ -414,14 +504,19 @@ load_psmsl_data <- function() {
 #' @param lon          Numeric vector of ERA5 longitudes.
 #' @param lat          Numeric vector of ERA5 latitudes.
 #' @param country_abbrev ISO-3 country code (e.g. \code{"FRA"}).
-#' @param admin_level  Integer. Administrative level: \code{1} for regions,
-#'   \code{2} for departments, etc. Default \code{1}.
+#' @param admin_level  Integer >= 0. Administrative level fetched via GADM:
+#'   \code{0} for the national boundary, \code{1} for regions, \code{2} for
+#'   departments, etc. (availability depends on how finely GADM subdivides
+#'   the given country). Default \code{1}.
 #' @param resolution   Numeric. Half-width of ERA5 grid cells in degrees.
 #'   Default \code{0.25}.
 #' @param crs_metric   Integer. EPSG code of a metric CRS appropriate for
 #'   the country, used for accurate area calculations. Default \code{4326}
 #'   (WGS84, not recommended for production — prefer a local CRS such as
 #'   \code{2154} for France or \code{27700} for the UK).
+#' @param cache_dir    Directory used to cache the downloaded GADM
+#'   administrative boundaries. Default: a persistent per-user cache
+#'   directory (see \code{tools::R_user_dir()}).
 #' @return A list with elements:
 #'   \describe{
 #'     \item{\code{weights}}{A named list of length
@@ -434,17 +529,16 @@ load_psmsl_data <- function() {
 #' @export
 #' @importFrom sf st_as_sfc st_bbox st_sf st_intersection st_area
 #'   st_transform st_crs
-#' @importFrom rnaturalearth ne_states
 build_admin_mask <- function(lon, lat, country_abbrev,
                              admin_level = 1,
                              resolution  = 0.25,
-                             crs_metric  = 4326) {
-  # Administrative polygons projected into the metric CRS
-  admin_sf <- rnaturalearth::ne_states(
-    country     = .iso3_to_country_name(country_abbrev),
-    returnclass = "sf"
-  )
-  admin_sf <- admin_sf[, c("name", "geometry")]
+                             crs_metric  = 4326,
+                             cache_dir   = .gadm_cache_dir()) {
+  # Administrative polygons projected into the metric CRS. Uses GADM
+  # (.load_admin_sf()), which actually honours `admin_level` -- unlike the
+  # former rnaturalearth::ne_states() call, which always returned the same
+  # fixed level regardless of what was requested here.
+  admin_sf <- .load_admin_sf(country_abbrev, admin_level, cache_dir)
   admin_sf <- sf::st_transform(admin_sf, crs_metric)
 
   # Build ERA5 grid cells as squared polygons, and project
@@ -494,5 +588,51 @@ build_admin_mask <- function(lon, lat, country_abbrev,
     units   = unique(admin_sf$name),
     lon     = lon,
     lat     = lat
+  )
+}
+
+#' Attach spatial/temporal metadata as attributes on a xaci object
+#'
+#' Used internally so that grid-cell arrays and admin data.frames returned
+#' by \code{calculate_aci()} are self-describing, regardless of the spatial
+#' aggregation level chosen by the user (grid-cell, admin level 1, 2, ...).
+#' This allows e.g. an individual component array such as \code{grid$t90}
+#' to be passed directly to \code{plot_aci_map()} without needing the
+#' parent list.
+#'
+#' @param x Object to annotate (array or data.frame).
+#' @param lon,lat,time Optional spatial/temporal coordinates (grid-cell mode).
+#' @param country_abbrev Optional ISO3 country code.
+#' @param admin_level Optional administrative level (admin mode).
+#' @param crs_metric Optional EPSG code (admin mode).
+#' @return \code{x} with the relevant non-\code{NULL} attributes attached.
+#' @noRd
+.attach_spatial_attrs <- function(x,
+                                  lon            = NULL,
+                                  lat            = NULL,
+                                  time           = NULL,
+                                  country_abbrev = NULL,
+                                  admin_level    = NULL,
+                                  crs_metric     = NULL) {
+  if (!is.null(lon))            attr(x, "lon")            <- lon
+  if (!is.null(lat))            attr(x, "lat")            <- lat
+  if (!is.null(time))           attr(x, "time")           <- time
+  if (!is.null(country_abbrev)) attr(x, "country_abbrev") <- country_abbrev
+  if (!is.null(admin_level))    attr(x, "admin_level")    <- admin_level
+  if (!is.null(crs_metric))     attr(x, "crs_metric")     <- crs_metric
+  x
+}
+
+#' Read back the spatial/temporal attributes attached by
+#' \code{.attach_spatial_attrs()}
+#' @noRd
+.get_spatial_attrs <- function(x) {
+  list(
+    lon            = attr(x, "lon"),
+    lat            = attr(x, "lat"),
+    time           = attr(x, "time"),
+    country_abbrev = attr(x, "country_abbrev"),
+    admin_level    = attr(x, "admin_level"),
+    crs_metric     = attr(x, "crs_metric")
   )
 }

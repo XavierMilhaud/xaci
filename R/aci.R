@@ -43,11 +43,21 @@ NULL
     array(0, c(nl, nw, nt))
 
   for (t in seq_len(nt)) {
+    # NB: en R, `0 * NA` vaut `NA`, pas `0`. Or `alpha` est precisement
+    # defini comme 0 la ou `sl_data` est NA (cellules non cotieres / sans
+    # signal sealevel). Sans neutraliser ces NA, `alpha * sl_data` reste NA
+    # meme quand alpha = 0, et cette NA contamine `num` (et donc `ACI`)
+    # POUR TOUTES LES CELLULES, y compris celles loin de toute cote -
+    # potentiellement rendant l'array ACI entierement NA si sealevel est
+    # NA partout (pas de stations marégraphiques chargees/disponibles).
+    sl_t <- sl_data[, , t]
+    sl_t[is.na(sl_t)] <- 0
+
     num <- comp_t_high$data[, , t] -
       comp_t_low$data[, , t]  +
       comp_prec$data[, , t]   +
       comp_drought$data[, , t]+
-      alpha * sl_data[, , t]  +
+      alpha * sl_t            +
       comp_wind$data[, , t]
     den <- 5 + alpha   # [nl x nw], soit 5 soit 6
     aci_data[, , t] <- num / den
@@ -67,117 +77,6 @@ NULL
   out[["sealevel"]]      <- sl_data
   out
 }
-
-#' Aggregate a grid-cell ACI object to the requested spatial and temporal level
-#'
-#' @param grid_aci   Output of \code{.compute_aci_grid()}.
-#' @param granularity One of \code{"month"}, \code{"season"},
-#'   \code{"semester"}, \code{"year"}.
-#' @param area        Logical. If \code{TRUE} and \code{admin_level = NULL},
-#'   returns a national scalar \code{data.frame}.
-#' @param admin_level Integer or \code{NULL}.
-#' @param admin_mask  Output of \code{build_admin_mask()}, or \code{NULL}.
-#' @param admin_assignment Output of \code{assign_sealevel_to_admin()}, or
-#'   \code{NULL}.
-#' @param col_high    Name of the temperature-high component.
-#' @param col_low     Name of the temperature-low component.
-#' @param factor      Numeric. Sea-level weight for national scalar mode.
-#' @return A \code{data.frame} (national or admin) or a named list of arrays
-#'   (grid-cell mode).
-#' @keywords internal
-aggregate_aci <- function(grid_aci, granularity,
-                          area          = TRUE,
-                          admin_level   = NULL,
-                          admin_mask    = NULL,
-                          admin_assignment = NULL,
-                          col_high      = "t90",
-                          col_low       = "t10",
-                          factor        = 1 / 5) {
-
-  components <- c("ACI", col_high, col_low,
-                  "precipitation", "drought", "wind", "sealevel")
-  time       <- grid_aci$time
-
-  # ------------------------------------------------------------------ #
-  # Mode grid-cell : agrégation temporelle seulement                    #
-  # ------------------------------------------------------------------ #
-  if (is.null(admin_level) && !area) {
-    out <- list(lon = grid_aci$lon, lat = grid_aci$lat)
-    for (comp in components) {
-      agg        <- .aggregate_granularity_array(grid_aci[[comp]], time,
-                                                 granularity)
-      out[[comp]] <- agg$data
-    }
-    out$time <- agg$time   # même pour tous, on prend le dernier
-    return(out)
-  }
-
-  # ------------------------------------------------------------------ #
-  # Mode national scalaire : moyenne spatiale puis agrégation temporelle#
-  # ------------------------------------------------------------------ #
-  if (is.null(admin_level) && area) {
-    to_ts <- function(arr) {
-      # Moyenne spatiale [nl x nw x nt] -> vecteur [nt]
-      apply(arr, 3L, mean, na.rm = TRUE)
-    }
-
-    # ACI national : recalculé depuis les composantes moyennées
-    # (on n'utilise pas grid_aci$ACI car alpha varie spatialement)
-    t_high <- to_ts(grid_aci[[col_high]])
-    t_low  <- to_ts(grid_aci[[col_low]])
-    prec   <- to_ts(grid_aci$precipitation)
-    drought<- to_ts(grid_aci$drought)
-    wind   <- to_ts(grid_aci$wind)
-    sl     <- to_ts(grid_aci$sealevel)
-
-    aci_national <- (t_high - t_low + prec + drought +
-                       factor * sl + wind) / (5 + factor)
-
-    df <- data.frame(
-      row.names     = format(as.POSIXct(time), "%Y-%m"),
-      ACI           = aci_national
-    )
-    df[[col_high]]        <- t_high
-    df[[col_low]]         <- t_low
-    df$precipitation      <- prec
-    df$drought            <- drought
-    df$wind               <- wind
-    df$sealevel           <- sl
-
-    return(aggregate_granularity(df, granularity))
-  }
-
-  # ------------------------------------------------------------------ #
-  # Mode administratif : moyenne par unité puis agrégation temporelle   #
-  # ------------------------------------------------------------------ #
-  units    <- admin_mask$units
-  nl       <- dim(grid_aci$ACI)[1]
-  nw       <- dim(grid_aci$ACI)[2]
-  nt       <- dim(grid_aci$ACI)[3]
-
-  # Construire un data.frame ACI_<unit> par unité
-  aci_list <- lapply(units, function(u) {
-    mask <- admin_mask$masks[[u]]   # matrice logique [nl x nw]
-    if (is.null(mask) || !any(mask, na.rm = TRUE))
-      return(data.frame(aci = rep(NA_real_, nt),
-                        row.names = format(as.POSIXct(time), "%Y-%m")))
-
-    # Moyenne spatiale sur les cellules de l'unité
-    vals <- vapply(seq_len(nt), function(t) {
-      slice <- grid_aci$ACI[, , t]
-      mean(slice[mask], na.rm = TRUE)
-    }, numeric(1))
-
-    data.frame(aci       = vals,
-               row.names = format(as.POSIXct(time), "%Y-%m"))
-  })
-
-  monthly_aci           <- do.call(cbind, aci_list)
-  colnames(monthly_aci) <- paste0("ACI_", units)
-
-  aggregate_granularity(monthly_aci, granularity)
-}
-
 
 #' Calculate the Actuarial Climate Index
 #'
@@ -283,8 +182,15 @@ aggregate_aci <- function(grid_aci, granularity,
 #'       plus \code{lon}, \code{lat}, and \code{time} (character vector of
 #'       period labels at the chosen granularity).}
 #'     \item{Administrative (\code{admin_level} integer)}{
-#'       A \code{data.frame} with one \code{ACI_<unit>} column per
-#'       administrative unit, indexed by dates at the chosen granularity.}
+#'       A \code{data.frame} indexed by dates at the chosen granularity,
+#'       with one \code{<component>_<unit>} column per administrative unit
+#'       FOR EACH component (\code{ACI}, \code{t<percentile_high>},
+#'       \code{t<percentile_low>}, \code{precipitation}, \code{drought},
+#'       \code{wind}, \code{sealevel}) -- e.g. \code{ACI_<unit>},
+#'       \code{t90_<unit>}, \code{precipitation_<unit>}, etc. This mirrors
+#'       the grid-cell mode's per-component structure, and lets
+#'       \code{plot_aci_map()} plot any individual component at admin level,
+#'       not just \code{ACI} itself.}
 #'   }
 #'
 #' @examples
@@ -425,6 +331,7 @@ calculate_aci <- function(country_abbrev,
 
     message("Computing drought component...")
     comp_drought <- drought_component(
+      country_abbrev = country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,
       reference_period        = reference_period,
@@ -436,6 +343,7 @@ calculate_aci <- function(country_abbrev,
 
     message("Computing wind component...")
     comp_wind <- wind_component(
+      country_abbrev = country_abbrev,
       wind_u10_data_path = wind_u10_data_path,
       wind_v10_data_path = wind_v10_data_path,
       mask_path          = mask_data_path,
@@ -448,6 +356,7 @@ calculate_aci <- function(country_abbrev,
 
     message("Computing precipitation component...")
     comp_prec <- precipitation_component(
+      country_abbrev = country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,
       reference_period        = reference_period,
@@ -459,6 +368,7 @@ calculate_aci <- function(country_abbrev,
 
     message(sprintf("Computing temperature T%d component...", percentile_low))
     comp_t_low <- temperature_component(
+      country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
       reference_period      = reference_period,
@@ -473,6 +383,7 @@ calculate_aci <- function(country_abbrev,
 
     message(sprintf("Computing temperature T%d component...", percentile_high))
     comp_t_high <- temperature_component(
+      country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
       reference_period      = reference_period,
@@ -487,16 +398,17 @@ calculate_aci <- function(country_abbrev,
 
     message("Computing sea-level component...")
     comp_sl <- sealevel_component(
-      country_abbrev   = country_abbrev,
-      study_period     = study_period,
-      reference_period = reference_period,
-      lon              = if (grid_cell_mode) comp_drought$lon else NULL,
-      lat              = if (grid_cell_mode) comp_drought$lat else NULL,
-      max_dist_km      = max_dist_km,
-      data_dir         = sealevel_dir,
-      admin_assignment = admin_assignment,
-      save             = save,
-      save_dir         = save_dir
+      country_abbrev      = country_abbrev,
+      study_period        = study_period,
+      reference_period    = reference_period,
+      mask_path           = mask_data_path,
+      grid_cell           = grid_cell_mode,   # TRUE if area=FALSE + admin_level=NULL
+      max_dist_km         = max_dist_km,
+      data_dir            = sealevel_dir,
+      admin_assignment    = admin_assignment,
+      computed_components = FALSE,
+      save                = save,
+      save_dir            = save_dir
     )
 
   } else {
@@ -526,15 +438,15 @@ calculate_aci <- function(country_abbrev,
       comp_t_low   <- standardize_metric(t_low_raw,  reference_period, area = area)
       comp_t_high  <- standardize_metric(t_high_raw, reference_period, area = area)
 
+      # Trois cas mutuellement exclusifs et exhaustifs
       comp_sl <- if (grid_cell_mode) {
-        # Interpolation IDW sur la grille ERA5 depuis les stations en cache
         interpolate_sealevel_to_grid(sl_raw,
                                      lon         = comp_drought$lon,
                                      lat         = comp_drought$lat,
                                      max_dist_km = max_dist_km)
       } else {
-        # Mode national scalaire : moyenne des stations
-        reduce_sealevel_over_region(sl_raw$data, admin_assignment = NULL)
+        # Mode national scalaire : admin_mask est NULL et grid_cell_mode est FALSE
+        reduce_sealevel_over_region(sl_raw$data)
       }
 
     } else {
@@ -553,9 +465,12 @@ calculate_aci <- function(country_abbrev,
       comp_t_high  <- reduce_dataarray_to_dataframe(
         standardize_metric(t_high_raw, reference_period, area = FALSE),
         column_name = col_high,        admin_mask = admin_mask)
+
+      # Mode administratif : agrégation par unité depuis les stations
       comp_sl <- reduce_sealevel_over_region(sl_raw$data,
                                              admin_assignment = admin_assignment)
     }
+
   }
 
   # ------------------------------------------------------------------ #
@@ -586,6 +501,19 @@ calculate_aci <- function(country_abbrev,
       agg_time    <- agg$time
     }
     out$time <- agg_time
+
+    # Attache lon/lat/time/country_abbrev directement sur chaque array de
+    # composante, pour que ces arrays soient auto-suffisants une fois extraits
+    # de la liste (ex: grid$t90 utilisable seul, sans passer par grid).
+    for (comp in components) {
+      out[[comp]] <- .attach_spatial_attrs(
+        out[[comp]],
+        lon            = out$lon,
+        lat            = out$lat,
+        time           = out$time,
+        country_abbrev = country_abbrev
+      )
+    }
     return(out)
   }
 
@@ -630,7 +558,7 @@ calculate_aci <- function(country_abbrev,
   # ------------------------------------------------------------------ #
   units <- admin_mask$units
 
-  aci_list <- lapply(units, function(u) {
+  per_unit <- lapply(units, function(u) {
 
     get_col <- function(df, prefix) {
       col <- paste0(prefix, "_", u)
@@ -655,13 +583,45 @@ calculate_aci <- function(country_abbrev,
     }
     alpha <- if (has_sea) admin_assignment$factors[[u]] else 0
 
-    aci <- (t_high_u - t_low_u + prec_u + drought_u +
-              alpha * sl_u_aligned + wind_u) / (5 + alpha)
+    # Meme piege qu'au niveau grid-cell : `alpha * sl_u_aligned` vaut NA des
+    # que `sl_u_aligned` est NA, MEME quand `alpha = 0` (non cotier), car en
+    # R `0 * NA` vaut `NA` et non `0`. Sans ce garde-fou, `ACI` devient NA
+    # pour toutes les unites non cotieres (et pour toute date sans
+    # alignement sealevel quand alpha = 0).
+    sl_term <- if (alpha == 0) rep(0, length(dates)) else alpha * sl_u_aligned
 
-    data.frame(aci, row.names = dates)
+    aci <- (t_high_u - t_low_u + prec_u + drought_u +
+              sl_term + wind_u) / (5 + alpha)
+
+    # On conserve aussi chaque composante individuelle (pas seulement ACI),
+    # pour pouvoir tracer plot_aci_map(admin_df, variable = "t90") etc. au
+    # meme titre que l'ACI lui-meme, a n'importe quel niveau administratif.
+    comp_df <- data.frame(
+      ACI         = aci,
+      t_high_u,
+      t_low_u,
+      precipitation = prec_u,
+      drought       = drought_u,
+      wind          = wind_u,
+      sealevel      = sl_u_aligned,
+      row.names     = dates,
+      check.names   = FALSE
+    )
+    colnames(comp_df)[2:3] <- c(col_high, col_low)
+    colnames(comp_df) <- paste0(colnames(comp_df), "_", u)
+    comp_df
   })
 
-  monthly_aci           <- do.call(cbind, aci_list)
-  colnames(monthly_aci) <- paste0("ACI_", units)
-  aggregate_granularity(monthly_aci, granularity)
+  monthly_aci <- do.call(cbind, per_unit)
+  result <- aggregate_granularity(monthly_aci, granularity)
+
+  # Attache country_abbrev/admin_level/crs_metric en attributs, pour que
+  # plot_aci_map() puisse les retrouver automatiquement sans que l'utilisateur
+  # ait à les re-spécifier.
+  .attach_spatial_attrs(
+    result,
+    country_abbrev = country_abbrev,
+    admin_level    = admin_level,
+    crs_metric     = crs_metric
+  )
 }

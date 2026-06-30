@@ -2,20 +2,29 @@
 % Please edit documentation in R/sealevel.R
 \name{sealevel_load_metadata}
 \alias{sealevel_load_metadata}
-\title{Load PSMSL station coordinates from the directory metadata}
+\title{Load PSMSL station coordinates from the global station list CSV}
 \usage{
-sealevel_load_metadata(directory)
+sealevel_load_metadata(directory, meta_path = NULL, station_ids = NULL)
 }
 \arguments{
-\item{directory}{Path to the PSMSL data directory.}
+\item{directory}{Path to the PSMSL data directory. The metadata file
+\code{psmsl_data.csv} must be located in the same directory or its
+parent. Alternatively, \code{meta_path} can be supplied directly.}
+
+\item{meta_path}{Optional explicit path to the CSV file. If \code{NULL}
+(default), the function looks for \code{psmsl_data.csv} first in
+\code{directory}, then one level up.}
+
+\item{station_ids}{Integer vector of PSMSL station IDs to keep. If
+\code{NULL} (default), all stations in the CSV are returned.}
 }
 \value{
-A \code{data.frame} with columns \code{station_id},
-  \code{lon}, \code{lat}.
+A \code{data.frame} with columns \code{station_id} (character,
+  e.g. \code{"Measurement_1"}), \code{lon}, \code{lat}.
 }
 \description{
-PSMSL archives include a \code{filelist.txt} with one row per station:
-\code{id; lat; lon; name; ...}. This function reads it and returns a
-\code{data.frame} with columns \code{station_id}, \code{lon}, \code{lat}.
+Reads the PSMSL station metadata CSV (columns: Station Name, ID, Lat.,
+Lon., GLOSS ID, Country, Date, Coastline, Station) and returns coordinates
+for the stations present in the data directory.
 }
 \keyword{internal}

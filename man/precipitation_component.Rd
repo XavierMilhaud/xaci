@@ -7,14 +7,18 @@
 precipitation_component(
   precipitation_data_path,
   mask_path = NULL,
+  country_abbrev,
   reference_period,
   var_name = "tp",
   window_size = 5L,
   area = FALSE,
+  admin_level = NULL,
   admin_mask = NULL,
+  crs_metric = 4326,
+  computed_components = FALSE,
   save = FALSE,
-  save_dir = paste("results/", strsplit(precipitation_data_path, "/", fixed =
-    TRUE)[[1]][3], sep = "")
+  save_dir = paste0("results/", country_abbrev),
+  load_dir = paste0("results/", country_abbrev)
 )
 }
 \arguments{
@@ -23,6 +27,8 @@ precipitation_component(
 \item{mask_path}{Path to the country mask NetCDF file, or
 \code{NULL}.}
 
+\item{country_abbrev}{Three-letter ISO country code.}
+
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
 \item{var_name}{Variable name in the NetCDF. Default
@@ -30,27 +36,26 @@ precipitation_component(
 
 \item{window_size}{Rolling window in days. Default \code{5}.}
 
-\item{area}{Logical. If \code{TRUE} return national
-spatial mean as a named numeric vector. Ignored when \code{admin_mask}
-is not \code{NULL}. Default \code{FALSE}.}
+\item{area}{Logical. Default \code{FALSE}.}
+
+\item{admin_level}{Integer or \code{NULL}.}
 
 \item{admin_mask}{Output of \code{build_admin_mask()}, or
-\code{NULL} (default) for national behaviour.}
+\code{NULL}.}
 
-\item{save}{Logical. If \code{TRUE}, saves the grid-cell-level object
-to \code{save_dir} before aggregation. Default \code{FALSE}.}
+\item{crs_metric}{EPSG code. Default \code{4326}.}
 
-\item{save_dir}{Character. Directory for the cached \code{.rds} file.
-Created if it does not exist. Default \code{"results/<country_abbrev>"}.}
+\item{computed_components}{Logical. Default \code{FALSE}.}
+
+\item{save}{Logical. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+
+\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-  numeric vector (standardised monthly values).
-  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-  \code{data} [lon x lat x months] and \code{time}.
-  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-  column \code{precipitation_<unit>} per administrative unit, indexed by
-  month-start dates.
+Named numeric vector, standardised list, or \code{data.frame}
+  per admin unit.
 }
 \description{
 Computes the standardised anomaly of maximum monthly precipitation over a

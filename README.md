@@ -87,7 +87,7 @@ cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 This step can take hours/days depending on the number of years and variables requested.
 
 ```r
-# Download t2m, tp, u10, v10 for France, 1960–2024
+# Download t2m (temperature), tp (precipitation), u10 and v10 (wind) for France, 1960–2024
 # One NetCDF per variable is produced in data/era5/
 download_era5_all(
   years    = 1960:2024,
@@ -97,10 +97,10 @@ download_era5_all(
 
 # Or download a single variable:
 download_era5(
-  variable = "t2m",
-  years    = 1960:2024,
+  variable = "v10",
+  years    = 1970:1980,
   area     = c(51.5, -5.5, 41.0, 10.0), # area for France
-  dest_dir = "data/era5/FRA/1960_2024"
+  dest_dir = "data/era5/FRA"
 )
 ```
 
@@ -112,7 +112,7 @@ download_mask(
   area      = c(51.5, -5.5, 41.0, 10.0),
   dest_dir  = "data/era5/FRA"
 )
-# → data/era5/mask_FRA.nc  (variable: 'country', values in [0, 1])
+# → data/era5/FRA/mask_FRA.nc  (variable: 'country', values in [0, 1])
 ```
 
 ---
@@ -136,17 +136,17 @@ This calculation can take several hours depending on the platform.
 library(xaci)
 
 result <- calculate_aci(
+  country_abbrev          = "FRA",
+  study_period            = c("2011-01-01", "2015-12-31"),
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
   temperature_data_path   = "data/era5/FRA/t2m_2011_2015.nc",
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   wind_u10_data_path      = "data/era5/FRA/u10_2011_2015.nc",
   wind_v10_data_path      = "data/era5/FRA/v10_2011_2015.nc",
-  country_abbrev          = "FRA",
-  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
-  study_period            = c("2011-01-01", "2015-12-31"),
-  reference_period        = c("2011-01-01", "2013-12-31"),
   granularity             = "month",   # "month", "season", "semester", "year"
-  area                    = TRUE,      # TRUE = national scalar (default)
-  factor                  = 0.2,
+  area                    = TRUE,      # aggregate at national level
+  factor                  = 0.2,       # proportion of country coastal line 
   admin_level             = NULL,
   crs_metric              = 2154,
   save                    = TRUE       # cache grid-cell objects to results/
@@ -191,7 +191,16 @@ calculate_aci(
 # (period tag derived from reference_period)
 ```
 
+In addition to the computation of the ACI, all computations have been saved for each component at the ERA5 grid cell level 
+(defined from downloaded data), at a monthly time step. It is therefore not interesting to run once again the computations for 
+each component. However, the computations can be performed component-wise instead of for the whole set of components, if necessary.
+
+
 **Step 2 — reload and re-aggregate freely**
+
+Once obtained the objects corresponding to monthly calculations of ACI components at the grid cell level, it is quite
+straightforward to perform the computation of the ACI or its components, whatever the time aggregation or spatial 
+aggregation specified by the user.
 
 ```r
 # Monthly national index, no re-computation
@@ -200,18 +209,26 @@ monthly_national_aci_FRA <- calculate_aci(
   study_period = c("2011-01-01", "2015-12-31"),
   reference_period = c("2011-01-01", "2013-12-31"),
   years = 2011:2015,
+  temperature_data_path = NULL,
+  precipitation_data_path = NULL,
+  wind_u10_data_path = NULL,
+  wind_v10_data_path = NULL,
+  mask_data_path = NULL,
+  sealevel_dir = NULL,
+  percentile_high = 90,
+  percentile_low = 10,
   granularity = "month",
   area = TRUE,
-  factor = 1 / 5,
+  factor = 0.2,
+  max_dist_km = 500,
   admin_level = NULL,
-  crs_metric  = 2154,
+  crs_metric = 2154,
   save = FALSE,
-  load_dir = paste("results/",country_abbrev,sep=""),
+  load_dir = paste0("results/", country_abbrev),
   computed_components = TRUE
 )
 
-plot_aci_timeseries(aci_df = monthly_national_aci_FRA, smooth = TRUE, span = 0.2,
-  title = "Actuarial Climate Index (ACI)", colour = "#1F77B4", fill_area = TRUE)
+plot_aci_timeseries(aci_df = monthly_national_aci_FRA, smooth = TRUE, span = 0.2, fill_area = TRUE)
 plot_aci_components(monthly_national_aci_FRA, type = "bar")
 plot_aci_components(monthly_national_aci_FRA, type = "bar", components = c("t90","t10"))
 plot_aci_components(monthly_national_aci_FRA, type = "stacked", components = "sealevel")
@@ -226,22 +243,18 @@ seasonal_national_aci_FRA <- calculate_aci(
   years = 2011:2015,
   granularity = "season",
   area = TRUE,
-  factor = 1 / 5,
-  admin_level = NULL,
-  crs_metric  = 2154,
-  save = FALSE,
-  load_dir = paste("results/",country_abbrev,sep=""),
+  factor = 0.2,
+  load_dir = paste0("results/", country_abbrev),
   computed_components = TRUE
 )
 
-plot_aci_timeseries(aci_df = seasonal_national_aci_FRA, smooth = TRUE, span = 0.2,
-  title = "Actuarial Climate Index (ACI)", colour = "#1F77B4", fill_area = TRUE)
+plot_aci_timeseries(aci_df = seasonal_national_aci_FRA, smooth = TRUE, span = 0.2, fill_area = TRUE)
 plot_aci_components(seasonal_national_aci_FRA, type = "bar")
 plot_aci_components(seasonal_national_aci_FRA, type = "bar", components = c("t90"))
 plot_aci_components(seasonal_national_aci_FRA, type = "stacked", components = "sealevel")
 plot_aci_distribution(seasonal_national_aci_FRA, components = c("t90"), type = "boxplot", include_aci = TRUE)
 plot_aci_distribution(seasonal_national_aci_FRA, type = "violin")
-plot_aci_distribution(seasonal_national_aci_FRA, type = "density")
+
 
 # By department, no re-computation
 calculate_aci(
@@ -251,9 +264,6 @@ calculate_aci(
   admin_level         = 2,
   crs_metric          = 2154
 )
-
-                          
-
 ```
 
 ### Grid-cell level output (for mapping)
@@ -263,33 +273,33 @@ standardised grid-cell objects instead of a scalar time series. This is the
 entry point for cartographic visualisation.
 
 ```r
-grid <- calculate_aci(
+monthlyACI_gridCell <- calculate_aci(
   country_abbrev = "FRA",
   study_period = c("2011-01-01", "2015-12-31"),
   reference_period = c("2011-01-01", "2013-12-31"),
   years = 2011:2015,
   granularity = "month",
-  area = FALSE,         # keep full [lon x lat x time] arrays
+  area = FALSE,
+  factor = 0.2,
+  max_dist_km = 500,
   admin_level = NULL,
-  crs_metric  = 2154,
+  crs_metric = 2154,
   save = FALSE,
-  load_dir = paste("results/",country_abbrev,sep=""),
+  load_dir = paste0("results/", country_abbrev),
   computed_components = TRUE
 )
 
-# grid$t90$data          : array [lon x lat x time]
-# grid$t90$lon           : longitude vector
-# grid$t90$lat           : latitude vector
-# grid$t90$time          : POSIXct time vector
-# grid$precipitation$data: array [lon x lat x time]
-# grid$sealevel          : data.frame of tide-gauge stations
-
-dim(grid$t90$data)
+# monthlyACI_gridCell$lon          : longitude vector
+# monthlyACI_gridCell$lat          : latitude vector
+# monthlyACI_gridCell$t10          : array [lon x lat x time]
+# monthlyACI_gridCell$t90          : array [lon x lat x time]
+# monthlyACI_gridCell$precipitation: array [lon x lat x time]
+# monthlyACI_gridCell$drought      : array [lon x lat x time]
+# monthlyACI_gridCell$wind         : array [lon x lat x time]
+# monthlyACI_gridCell$sealevel     : array [lon x lat x time]
+# monthlyACI_gridCell$ACI          : array [lon x lat x time]
 ```
 
-J'aimerais que l'objet 'grid' contienne egalement les valeurs de l'ACI par grid cell et son evolution dans le temps.
-Donc j'aimerais que l'ACI apparaisse aussi sous forme d'array [lon x lat x time]. Ce qui implique peut-etre de gerer
-le niveau de la mer sous la meme forme [lon x lat x time]?
 Visualisation:
 
 ```r
@@ -297,11 +307,14 @@ Visualisation:
 ds <- load_component("data/era5/FRA/t2m_2011_2015.nc", "t2m",
                      mask_path = "data/era5/FRA/mask_FRA.nc")
 plot_aci_map(ds, time_index = "mean", var_label = "Temperature (K)", title = "Mean temperature")
-# Or maps precipitation from the computed precipitation component of the ACI:
-plot_aci_map(grid$t90, time_index = "mean", var_label = "Temperature (C)", title = "Mean t90")
+# hourly data from Copernicus: 5 years x 365,25 days x 24 hours = 43830
+plot_aci_map(ds, time_index = 43000, var_label = "Temperature (K)", title = "Mean temperature")
+
+# Maps precipitation from the computed precipitation component of the ACI:
+plot_aci_map(monthlyACI_gridCell, variable = "ACI", time_index = "mean", var_label = "ACI", title = "Mean ACI")
+plot_aci_map(monthlyACI_gridCell$ACI, time_index = "mean", var_label = "ACI", title = "Mean ACI")
 # Now map for the two last months of the study period (59th and 60th):
-plot_aci_map(grid$t90, time_index = 56, var_label = "Temperature (C)", title = "t90")
-plot_aci_map(grid$t90, time_index = 60, var_label = "Temperature (C)", title = "t90")
+plot_aci_map(monthlyACI_gridCell, variable = "t90", time_index = 60, var_label = "Temperature (C)", title = "t90")
 ```
 
 ---
@@ -312,63 +325,134 @@ Each component can be called independently. All accept `save = TRUE` /
 `save_dir` to cache their grid-cell object, and `area = FALSE` to return the
 full spatial array.
 
-### National scalar output (`area = TRUE`)
-
 ```r
 precipitation_component(
+  country_abbrev = "FRA",
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path               = "data/era5/FRA/mask_FRA.nc",
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  area                    = TRUE,
-  save                    = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  var_name = "tp", window_size = 5L,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
 )
 
 drought_component(
+  country_abbrev = "FRA",
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path               = "data/era5/FRA/mask_FRA.nc",
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  area                    = TRUE,
-  save                    = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
 )
 
 wind_component(
+  country_abbrev = "FRA",
   wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
   wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
-  mask_path          = "data/era5/mask_FRA.nc",
-  reference_period   = c("2011-01-01", "2013-12-31"),
-  area               = TRUE,
-  save               = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
 )
 
-# T90 (hot days)
 temperature_component(
+  country_abbrev = "FRA",
   temperature_data_path = "data/era5/FRA/t2m_1960_2024.nc",
-  mask_path             = "data/era5/FRA/mask_FRA.nc",
-  reference_period      = c("1960-01-01", "1990-12-31"),
-  percentile            = 90,
-  extremum              = "max",
-  above_thresholds      = TRUE,
-  area                  = TRUE,
-  save                  = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2061-01-01", "1990-12-31"),
+  percentile = 90, extremum = "max", above_thresholds = TRUE,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components   = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
 )
 
-# T10 (cold nights)
 temperature_component(
+  country_abbrev = "FRA",
   temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path             = "data/era5/FRA/mask_FRA.nc",
-  reference_period      = c("2011-01-01", "2013-12-31"),
-  percentile            = 10,
-  extremum              = "min",
-  above_thresholds      = FALSE,
-  area                  = TRUE,
-  save                  = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  percentile = 10, extremum = "min", above_thresholds = FALSE,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components   = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
 )
 
 sealevel_component(
-  country_abbrev   = "FRA",
-  study_period     = c("2011-01-01", "2015-12-31"),
+  country_abbrev = "FRA",
+  study_period = c("2011-01-01", "2015-12-31"),
   reference_period = c("2011-01-01", "2013-12-31"),
-  save             = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  grid_cell = TRUE,
+  max_dist_km = 500,
+  data_dir = NULL, 
+  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
+  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
+)
+```
+
+
+### National scalar output (`area = TRUE`)
+
+```r
+prec <- precipitation_component(
+  country_abbrev = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  var_name = "tp", window_size = 5L,
+  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+drought <- drought_component(
+  country_abbrev = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+wind <- wind_component(
+  country_abbrev = "FRA",
+  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
+  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+# T90 (hot days)
+t_hot <- temperature_component(
+  country_abbrev = "FRA",
+  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path = NULL,
+  reference_period = c("2011-01-01", "2013-12-31"),
+  percentile = 90, extremum = "max", above_thresholds = TRUE,
+  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+# T10 (cold nights)
+t_low <- temperature_component(
+  country_abbrev = "FRA",
+  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path = NULL,
+  reference_period = c("2011-01-01", "2013-12-31"),
+  percentile = 10, extremum = "min", above_thresholds = FALSE,
+  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+sealevel <- sealevel_component(
+  country_abbrev = "FRA",
+  study_period = c("2011-01-01", "2015-12-31"),
+  reference_period = c("2011-01-01", "2013-12-31"),
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  grid_cell = FALSE,
+  max_dist_km = 500,
+  data_dir = NULL, 
+  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
 )
 ```
 
@@ -377,13 +461,68 @@ sealevel_component(
 ```r
 # Full spatial array — suitable for mapping
 prec_grid <- precipitation_component(
+  country_abbrev = "FRA",
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path               = "data/era5/FRA/mask_FRA.nc",
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  area                    = FALSE,
-  save                    = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  var_name = "tp", window_size = 5L,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
 )
-dim(prec_grid$data)   # [lon x lat x time]
+plot_aci_map(...)
+
+drought_grid <- drought_component(
+  country_abbrev = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+wind_grid <- wind_component(
+  country_abbrev = "FRA",
+  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
+  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+# T90 (hot days)
+t_hot_grid <- temperature_component(
+  country_abbrev = "FRA",
+  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path = NULL,
+  reference_period = c("2011-01-01", "2013-12-31"),
+  percentile = 90, extremum = "max", above_thresholds = TRUE,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+# T10 (cold nights)
+t_low_grid <- temperature_component(
+  country_abbrev = "FRA",
+  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path = NULL,
+  reference_period = c("2011-01-01", "2013-12-31"),
+  percentile = 10, extremum = "min", above_thresholds = FALSE,
+  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
+
+sealevel_grid <- sealevel_component(
+  country_abbrev = "FRA",
+  study_period = c("2011-01-01", "2015-12-31"),
+  reference_period = c("2011-01-01", "2013-12-31"),
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  grid_cell = TRUE,
+  max_dist_km = 500,
+  data_dir = NULL, 
+  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
+)
 ```
 
 ### Administrative unit level
@@ -391,40 +530,27 @@ dim(prec_grid$data)   # [lon x lat x time]
 Build the spatial mask once, then pass it to any component:
 
 ```r
-tmp <- load_component("data/era5/FRA/tp_2011_2015.nc", "tp", "data/era5/FRA/mask_FRA.nc")
-dept_mask <- build_admin_mask(
-  lon            = tmp$lon,
-  lat            = tmp$lat,
-  country_abbrev = "FRA",   # ISO-3 code
-  admin_level    = 2,       # 1 = regions, 2 = departments, …
-  crs_metric     = 2154     # Lambert-93 for France
+prec_administrativeLevel1 <- precipitation_component(
+  country_abbrev = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  var_name = "tp", window_size = 5L,
+  area = FALSE, admin_level = 1, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
 )
-region_mask <- build_admin_mask(
-  lon            = tmp$lon,
-  lat            = tmp$lat,
-  country_abbrev = "FRA",   # ISO-3 code
-  admin_level    = 1,       # 1 = regions, 2 = departments, …
-  crs_metric     = 2154     # Lambert-93 for France
-)
-rm(tmp)
+plot_aci_map(prec_administrativeLevel1)
 
-precipitation_component(
+
+prec_administrativeLevel2 <- precipitation_component(
+  country_abbrev = "FRA",
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path               = "data/era5/FRA/mask_FRA.nc",
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  area                    = FALSE,
-  admin_mask              = dept_mask,
-  save                    = TRUE
+  mask_path = "data/era5/FRA/mask_FRA.nc",
+  reference_period = c("2011-01-01", "2013-12-31"),
+  var_name = "tp", window_size = 5L,
+  area = FALSE, admin_level = 2, admin_mask = NULL, crs_metric = 2154,
+  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
 )
-precipitation_component(
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path               = "data/era5/FRA/mask_FRA.nc",
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  area                    = FALSE,
-  admin_mask              = region_mask,
-  save                    = TRUE
-)
-# On a le meme resultat que l'on ait mis le region_mask ou le dept_mask!!!
 
 
 

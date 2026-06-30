@@ -2,20 +2,24 @@
 % Please edit documentation in R/temperature.R
 \name{temperature_component}
 \alias{temperature_component}
-\title{Calculate the full temperature component of the ACI in degrees Celsius}
+\title{Calculate the full temperature component of the ACI}
 \usage{
 temperature_component(
   temperature_data_path,
-  mask_path,
+  mask_path = NULL,
+  country_abbrev,
   reference_period,
   percentile = 90,
   extremum = "max",
   above_thresholds = TRUE,
   area = FALSE,
+  admin_level = NULL,
   admin_mask = NULL,
+  crs_metric = 4326,
+  computed_components = FALSE,
   save = FALSE,
-  save_dir = paste("results/", strsplit(temperature_data_path, "/", fixed =
-    TRUE)[[1]][3], sep = "")
+  save_dir = paste0("results/", country_abbrev),
+  load_dir = paste0("results/", country_abbrev)
 )
 }
 \arguments{
@@ -23,35 +27,36 @@ temperature_component(
 
 \item{mask_path}{Path to the country mask NetCDF file.}
 
+\item{country_abbrev}{Three-letter ISO country code.}
+
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
-\item{percentile}{Percentile for the threshold (90 or 10).}
+\item{percentile}{Percentile for the threshold. Default \code{90}.}
 
 \item{extremum}{\code{"max"} (hot) or \code{"min"} (cold).}
 
-\item{above_thresholds}{Logical (see \code{calculate_halfday_component}).}
+\item{above_thresholds}{Logical. Default \code{TRUE}.}
 
-\item{area}{Logical. If \code{TRUE} return national spatial
-mean as a named numeric vector. Ignored when \code{admin_mask} is not
-\code{NULL}. Default \code{FALSE}.}
+\item{area}{Logical. Default \code{FALSE}.}
+
+\item{admin_level}{Integer or \code{NULL}.}
 
 \item{admin_mask}{Output of \code{build_admin_mask()}, or
-\code{NULL} (default) for national behaviour.}
+\code{NULL}.}
 
-\item{save}{Logical. If \code{TRUE}, saves the grid-cell-level object
-to \code{save_dir} before aggregation. Default \code{FALSE}.}
+\item{crs_metric}{EPSG code. Default \code{4326}.}
 
-\item{save_dir}{Character. Directory for the cached \code{.rds} file.
-Created if it does not exist. Default \code{"results/<country_abbrev>"}.}
+\item{computed_components}{Logical. Default \code{FALSE}.}
+
+\item{save}{Logical. Default \code{FALSE}.}
+
+\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+
+\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{admin_mask} is \code{NULL} and \code{area = TRUE}: a named
-  numeric vector (standardised monthly values).
-  If \code{admin_mask} is \code{NULL} and \code{area = FALSE}: a list with
-  \code{data} [lon x lat x months] and \code{time}.
-  If \code{admin_mask} is not \code{NULL}: a \code{data.frame} with one
-  column \code{t90_<unit>} (or \code{t10_<unit>}) per administrative unit,
-  indexed by month-start dates.
+Named numeric vector, standardised list, or \code{data.frame}
+  per admin unit.
 }
 \description{
 Combines day and night half-day components (equal weighting), then

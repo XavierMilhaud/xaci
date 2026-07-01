@@ -307,21 +307,42 @@ calculate_aci <- function(country_abbrev,
   admin_assignment <- NULL
 
   if (!is.null(admin_level)) {
-    message("Building administrative mask (this may take a moment)...")
-    tmp_dataset <- load_component(temperature_data_path, "t2m", mask_data_path)
-    admin_mask  <- build_admin_mask(
-      lon            = tmp_dataset$lon,
-      lat            = tmp_dataset$lat,
-      country_abbrev = country_abbrev,
-      admin_level    = admin_level,
-      crs_metric     = crs_metric
-    )
-    admin_assignment <- assign_sealevel_to_admin(
-      country_abbrev = country_abbrev,
-      admin_level    = admin_level,
-      crs_metric     = crs_metric
-    )
-    rm(tmp_dataset)
+    # Noms des fichiers de cache admin
+    admin_tag <- sprintf("%s_L%d", country_abbrev, admin_level)
+    mask_path_rds       <- file.path(save_dir,
+                                     paste0("admin_mask_",       admin_tag, ".rds"))
+    assignment_path_rds <- file.path(save_dir,
+                                     paste0("admin_assignment_", admin_tag, ".rds"))
+
+    if (computed_components &&
+        file.exists(mask_path_rds) && file.exists(assignment_path_rds)) {
+      message("Loading cached admin mask and sealevel assignment...")
+      admin_mask       <- readRDS(mask_path_rds)
+      admin_assignment <- readRDS(assignment_path_rds)
+    } else {
+      message("Building administrative mask (this may take a moment)...")
+      tmp_dataset <- load_component(temperature_data_path, "t2m", mask_data_path)
+      admin_mask  <- build_admin_mask(
+        lon            = tmp_dataset$lon,
+        lat            = tmp_dataset$lat,
+        country_abbrev = country_abbrev,
+        admin_level    = admin_level,
+        crs_metric     = crs_metric
+      )
+      admin_assignment <- assign_sealevel_to_admin(
+        country_abbrev = country_abbrev,
+        admin_level    = admin_level,
+        crs_metric     = crs_metric
+      )
+      rm(tmp_dataset)
+
+      if (save) {
+        dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+        saveRDS(admin_mask,       mask_path_rds)
+        saveRDS(admin_assignment, assignment_path_rds)
+        message("Admin mask and sealevel assignment saved to: ", save_dir)
+      }
+    }
   }
 
   # ------------------------------------------------------------------ #
@@ -427,8 +448,8 @@ calculate_aci <- function(country_abbrev,
     drought_raw <- .load_rds("drought")
     wind_raw    <- .load_rds("wind")
     prec_raw    <- .load_rds("precipitation")
-    t_low_raw   <- .load_rds("temperature_lows")
-    t_high_raw  <- .load_rds("temperature_highs")
+    t_low_raw   <- .load_rds(paste0("temperature_t", as.integer(percentile_low)))
+    t_high_raw  <- .load_rds(paste0("temperature_t", as.integer(percentile_high)))
     sl_raw      <- .load_rds("sealevel")  # list(data, coords)
 
     if (is.null(admin_mask)) {
@@ -556,63 +577,89 @@ calculate_aci <- function(country_abbrev,
   # ------------------------------------------------------------------ #
   # Mode administratif                                                  #
   # ------------------------------------------------------------------ #
-  units <- admin_mask$units
 
-  per_unit <- lapply(units, function(u) {
+  # Nom de fichier cache pour les composantes deja agregees par unite admin.
+  # Le cache depend du pays, du niveau, ET de la periode de reference (car la
+  # standardisation utilise reference_period). Il ne depend PAS de study_period
+  # ni de granularity : ces deux dimensions sont appliquees apres le cache
+  # (aggregate_granularity() est appele en aval).
+  ref_tag_admin <- paste(substr(reference_period[1], 1, 4),
+                         substr(reference_period[2], 1, 4), sep = "_")
+  admin_comp_rds <- file.path(
+    save_dir,
+    sprintf("admin_components_%s_L%d_%s.rds",
+            country_abbrev, admin_level, ref_tag_admin)
+  )
 
-    get_col <- function(df, prefix) {
-      col <- paste0(prefix, "_", u)
-      if (!col %in% colnames(df))
-        return(rep(NA_real_, nrow(df)))
-      df[[col]]
+  if (computed_components && file.exists(admin_comp_rds)) {
+    message("Loading cached admin-level components from: ", admin_comp_rds)
+    monthly_aci <- readRDS(admin_comp_rds)
+
+  } else {
+    units <- admin_mask$units
+
+    per_unit <- lapply(units, function(u) {
+
+      get_col <- function(df, prefix) {
+        col <- paste0(prefix, "_", u)
+        if (!col %in% colnames(df))
+          return(rep(NA_real_, nrow(df)))
+        df[[col]]
+      }
+
+      t_high_u  <- get_col(comp_t_high,  col_high)
+      t_low_u   <- get_col(comp_t_low,   col_low)
+      prec_u    <- get_col(comp_prec,    "precipitation")
+      drought_u <- get_col(comp_drought, "drought")
+      wind_u    <- get_col(comp_wind,    "wind")
+
+      sl_col       <- paste0("sealevel_", u)
+      has_sea      <- sl_col %in% colnames(comp_sl)
+      dates        <- rownames(comp_t_high)
+      sl_u_aligned <- if (has_sea) {
+        comp_sl[[sl_col]][match(dates, rownames(comp_sl))]
+      } else {
+        rep(NA_real_, length(dates))
+      }
+      alpha <- if (has_sea) admin_assignment$factors[[u]] else 0
+
+      # Meme piege qu'au niveau grid-cell : `alpha * sl_u_aligned` vaut NA des
+      # que `sl_u_aligned` est NA, MEME quand `alpha = 0` (non cotier), car en
+      # R `0 * NA` vaut `NA` et non `0`. Sans ce garde-fou, `ACI` devient NA
+      # pour toutes les unites non cotieres (et pour toute date sans
+      # alignement sealevel quand alpha = 0).
+      sl_term <- if (alpha == 0) rep(0, length(dates)) else alpha * sl_u_aligned
+
+      aci <- (t_high_u - t_low_u + prec_u + drought_u +
+                sl_term + wind_u) / (5 + alpha)
+
+      # On conserve aussi chaque composante individuelle (pas seulement ACI),
+      # pour pouvoir tracer plot_aci_map(admin_df, variable = "t90") etc. au
+      # meme titre que l'ACI lui-meme, a n'importe quel niveau administratif.
+      comp_df <- data.frame(
+        ACI         = aci,
+        t_high_u,
+        t_low_u,
+        precipitation = prec_u,
+        drought       = drought_u,
+        wind          = wind_u,
+        sealevel      = sl_u_aligned,
+        row.names     = dates,
+        check.names   = FALSE
+      )
+      colnames(comp_df)[2:3] <- c(col_high, col_low)
+      colnames(comp_df) <- paste0(colnames(comp_df), "_", u)
+      comp_df
+    })
+
+    monthly_aci <- do.call(cbind, per_unit)
+
+    if (save) {
+      dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+      saveRDS(monthly_aci, admin_comp_rds)
+      message("Admin-level components saved to: ", admin_comp_rds)
     }
-
-    t_high_u  <- get_col(comp_t_high,  col_high)
-    t_low_u   <- get_col(comp_t_low,   col_low)
-    prec_u    <- get_col(comp_prec,    "precipitation")
-    drought_u <- get_col(comp_drought, "drought")
-    wind_u    <- get_col(comp_wind,    "wind")
-
-    sl_col       <- paste0("sealevel_", u)
-    has_sea      <- sl_col %in% colnames(comp_sl)
-    dates        <- rownames(comp_t_high)
-    sl_u_aligned <- if (has_sea) {
-      comp_sl[[sl_col]][match(dates, rownames(comp_sl))]
-    } else {
-      rep(NA_real_, length(dates))
-    }
-    alpha <- if (has_sea) admin_assignment$factors[[u]] else 0
-
-    # Meme piege qu'au niveau grid-cell : `alpha * sl_u_aligned` vaut NA des
-    # que `sl_u_aligned` est NA, MEME quand `alpha = 0` (non cotier), car en
-    # R `0 * NA` vaut `NA` et non `0`. Sans ce garde-fou, `ACI` devient NA
-    # pour toutes les unites non cotieres (et pour toute date sans
-    # alignement sealevel quand alpha = 0).
-    sl_term <- if (alpha == 0) rep(0, length(dates)) else alpha * sl_u_aligned
-
-    aci <- (t_high_u - t_low_u + prec_u + drought_u +
-              sl_term + wind_u) / (5 + alpha)
-
-    # On conserve aussi chaque composante individuelle (pas seulement ACI),
-    # pour pouvoir tracer plot_aci_map(admin_df, variable = "t90") etc. au
-    # meme titre que l'ACI lui-meme, a n'importe quel niveau administratif.
-    comp_df <- data.frame(
-      ACI         = aci,
-      t_high_u,
-      t_low_u,
-      precipitation = prec_u,
-      drought       = drought_u,
-      wind          = wind_u,
-      sealevel      = sl_u_aligned,
-      row.names     = dates,
-      check.names   = FALSE
-    )
-    colnames(comp_df)[2:3] <- c(col_high, col_low)
-    colnames(comp_df) <- paste0(colnames(comp_df), "_", u)
-    comp_df
-  })
-
-  monthly_aci <- do.call(cbind, per_unit)
+  }
   result <- aggregate_granularity(monthly_aci, granularity)
 
   # Attache country_abbrev/admin_level/crs_metric en attributs, pour que

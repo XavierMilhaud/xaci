@@ -97,8 +97,8 @@ download_era5_all(
 
 # Or download a single variable:
 download_era5(
-  variable = "v10",
-  years    = 1970:1980,
+  variable = "tp",
+  years    = 1960:2024,
   area     = c(51.5, -5.5, 41.0, 10.0), # area for France
   dest_dir = "data/era5/FRA"
 )
@@ -273,6 +273,8 @@ standardised grid-cell objects instead of a scalar time series. This is the
 entry point for cartographic visualisation.
 
 ```r
+country_abbrev <- "FRA"
+
 monthlyACI_gridCell <- calculate_aci(
   country_abbrev = "FRA",
   study_period = c("2011-01-01", "2015-12-31"),

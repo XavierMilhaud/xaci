@@ -84,7 +84,7 @@ calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
       # Rolling percentile (centred)
       rolled <- zoo::rollapply(series, width = window_size,
                                FUN = function(x) quantile(x, probs = n / 100,
-                                                           na.rm = TRUE),
+                                                          na.rm = TRUE),
                                fill = NA, align = "center")
       # Percentile of rolled values per day
       for (d in 1:366) {
@@ -188,7 +188,7 @@ temperature_component <- function(temperature_data_path,
 
   ref_tag <- paste(substr(reference_period[1], 1, 4),
                    substr(reference_period[2], 1, 4), sep = "_")
-  label   <- if (above_thresholds) "temperature_highs" else "temperature_lows"
+  label   <- paste0("temperature_t", as.integer(percentile))
 
   if (computed_components) {
     path <- file.path(load_dir, paste0(label, "_", ref_tag, ".rds"))

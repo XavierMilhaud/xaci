@@ -1,2 +1,6 @@
 .Rproj.user
 docs
+data/
+results/
+*.nc
+*.rds

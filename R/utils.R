@@ -167,7 +167,7 @@ NULL
 #' @param path Path to the NetCDF file.
 #' @param var_name Name of the variable to extract.
 #' @return A list with fields: \code{data} (3D array), \code{lon}, \code{lat}, \code{time}.
-#' @export
+#' @keywords internal
 #' @importFrom ncdf4 nc_open nc_close ncvar_get ncatt_get
 load_netcdf <- function(path, var_name) {
   nc <- ncdf4::nc_open(path)
@@ -368,7 +368,7 @@ reduce_dataarray_to_dataframe <- function(metric, column_name = "value",
 #' @return A \code{data.frame} named \code{"sealevel"} (national) or
 #'   \code{"sealevel_<unit>"} (per admin unit). Units without coastal stations
 #'   have \code{NA} values.
-#' @export
+#' @keywords internal
 reduce_sealevel_over_region <- function(df, admin_assignment = NULL) {
   dates <- as.Date(format(as.Date(rownames(df)), "%Y-%m-01"))
 
@@ -409,7 +409,7 @@ reduce_sealevel_over_region <- function(df, admin_assignment = NULL) {
 #' @param dataframes A list of \code{data.frame} objects sharing a common row-
 #'   name index.
 #' @return A single merged \code{data.frame}.
-#' @export
+#' @keywords internal
 merge_dataframes <- function(dataframes) {
   Reduce(function(left, right) {
     merge(left, right, by = "row.names", all = FALSE) |>

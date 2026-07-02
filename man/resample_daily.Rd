@@ -19,3 +19,4 @@ A new list with daily \code{time} and aggregated \code{data}.
 Aggregates sub-daily data to daily values using the supplied function
 (\code{sum} or \code{mean}).
 }
+\keyword{internal}

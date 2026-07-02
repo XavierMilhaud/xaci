@@ -432,41 +432,53 @@ interpolate_sealevel_to_grid <- function(raw, lon, lat,
 #' Calculate the sea-level component of the ACI
 #'
 #' @param country_abbrev   Three-letter country code (e.g. \code{"FRA"}).
-#' @param study_period     Character vector \code{c("start", "end")}.
+#' @param study_period     Character vector \code{c("start", "end")}. Required
+#'   to filter and/or download PSMSL tide-gauge data (unlike ERA5-based
+#'   components which read the full NetCDF file and filter in downstream steps).
 #' @param reference_period Character vector \code{c("start", "end")}.
 #' @param mask_path   Path to the country mask NetCDF. Used to extract the
-#'   ERA5 grid when \code{grid_cell = TRUE}.
-#' @param grid_cell   Logical. If \code{TRUE}, interpolates the standardised
-#'   anomalies onto the ERA5 grid and returns a list with a
-#'   \code{[nl x nw x nt]} array — consistent with all other component
-#'   functions. If \code{FALSE} (default), returns a \code{data.frame} of
-#'   station anomalies (national or per admin unit).
+#'   ERA5 grid when \code{area = FALSE}.
+#' @param area        Logical. Mirrors the \code{area} argument of all other
+#'   component functions: if \code{FALSE} (default), interpolates the
+#'   standardised anomalies onto the ERA5 grid and returns a list with a
+#'   \code{[lon x lat x t]} array — consistent with the grid-cell output of
+#'   \code{temperature_component()}, \code{precipitation_component()}, etc.
+#'   If \code{TRUE}, returns a \code{data.frame} of aggregated anomalies
+#'   (national or per admin unit, depending on \code{admin_level}).
 #' @param max_dist_km Numeric. Maximum distance (km) for IDW interpolation.
-#'   Only used when \code{grid_cell = TRUE}. Default \code{500}.
-#' @param data_dir Character or \code{NULL}. Path to PSMSL \code{.txt}
-#'   files. If \code{NULL}, data are downloaded automatically.
+#'   Only used when \code{area = FALSE}. Default \code{500}.
+#' @param sealevel_dir Character or \code{NULL}. Path to the directory
+#'   containing PSMSL \code{.txt} files. Named \code{sealevel_dir} for
+#'   consistency with the \code{sealevel_dir} argument of
+#'   \code{calculate_aci()}. If \code{NULL} or the directory does not exist,
+#'   data are downloaded automatically.
 #' @param admin_level Integer or \code{NULL}. If not \code{NULL}, returns one
 #'   column per admin unit. Ignored when \code{admin_assignment} is supplied.
 #' @param admin_assignment Output of \code{assign_sealevel_to_admin()}, or
 #'   \code{NULL}. When supplied, takes precedence over \code{admin_level}.
 #' @param crs_metric  EPSG code used when building \code{admin_assignment}
 #'   internally. Default \code{4326}.
-#' @param save     Logical. Default \code{FALSE}.
-#' @param save_dir Character. Default \code{"results/<country_abbrev>"}.
-#' @param computed_components Logical. Default \code{FALSE}.
-#' @param load_dir Character. Default \code{"results/<country_abbrev>"}.
-#' @return If \code{grid_cell = TRUE}: list with array
-#'   \code{[nl x nw x nt]}, \code{lon}, \code{lat}, \code{time}.
-#'   Otherwise: \code{data.frame} of station anomalies (national or per
-#'   admin unit).
+#' @param computed_components Logical. If \code{TRUE}, reloads a previously
+#'   saved \code{.rds} file from \code{load_dir}. Default \code{FALSE}.
+#' @param save     Logical. If \code{TRUE}, saves the processed result to
+#'   \code{save_dir}. Default \code{FALSE}.
+#' @param save_dir Character. Directory for saving results.
+#'   Default \code{"results/<country_abbrev>"}.
+#' @param load_dir Character. Directory from which to reload a cached result
+#'   when \code{computed_components = TRUE}.
+#'   Default \code{"results/<country_abbrev>"}.
+#' @return If \code{area = FALSE}: a list with a \code{[lon x lat x t]} array,
+#'   \code{lon}, \code{lat}, \code{time} — same structure as other grid-cell
+#'   components. If \code{area = TRUE}: a \code{data.frame} of station
+#'   anomalies (national or per admin unit).
 #' @export
 sealevel_component <- function(country_abbrev,
                                study_period,
                                reference_period,
                                mask_path           = NULL,
-                               grid_cell           = FALSE,
+                               area                = TRUE,
                                max_dist_km         = 500,
-                               data_dir            = paste0("data/psmsl/", country_abbrev),
+                               sealevel_dir        = paste0("data/psmsl/", country_abbrev),
                                admin_level         = NULL,
                                admin_assignment    = NULL,
                                crs_metric          = 4326,
@@ -485,10 +497,10 @@ sealevel_component <- function(country_abbrev,
            "\nRun sealevel_component() with save = TRUE first.")
     raw <- readRDS(path)
   } else {
-    if (!is.null(data_dir) && dir.exists(data_dir)) {
-      directory <- data_dir
+    if (!is.null(sealevel_dir) && dir.exists(sealevel_dir)) {
+      directory <- sealevel_dir
     } else {
-      directory <- request_sealevel_data(country_abbrev, dest_dir = data_dir)
+      directory <- request_sealevel_data(country_abbrev, dest_dir = sealevel_dir)
     }
     raw <- sealevel_process(directory, study_period, reference_period)
 
@@ -498,12 +510,12 @@ sealevel_component <- function(country_abbrev,
     }
   }
 
-  # --- Mode grille ERA5 ---
-  # La grille est extraite depuis le masque ERA5, comme dans les autres composantes
-  if (grid_cell) {
+  # --- Mode grille ERA5 (area = FALSE, comme les autres composantes) ---
+  if (!area) {
     if (is.null(mask_path))
-      stop("'mask_path' must be provided when grid_cell = TRUE.")
-    grid <- load_component("data/era5/FRA/tp_2011_2015.nc", var_name="tp", mask_path)
+      stop("'mask_path' must be provided when area = FALSE.")
+    grid <- load_component(mask_path, var_name = "lsm", mask_path = NULL)
+    #grid <- load_component("data/era5/FRA/tp_2011_2015.nc", var_name = "tp", mask_path)
     return(interpolate_sealevel_to_grid(raw,
                                         lon         = grid$lon,
                                         lat         = grid$lat,
@@ -516,7 +528,7 @@ sealevel_component <- function(country_abbrev,
                                                  admin_level, crs_metric)
   }
 
-  # --- Mode station (national ou administratif) ---
+  # --- Mode agrégé (national ou administratif) ---
   if (is.null(admin_assignment)) {
     return(reduce_sealevel_over_region(raw$data))
   }

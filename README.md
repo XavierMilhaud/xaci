@@ -97,7 +97,7 @@ download_era5_all(
 
 # Or download a single variable:
 download_era5(
-  variable = "tp",
+  variable = "v10",
   years    = 1960:2024,
   area     = c(51.5, -5.5, 41.0, 10.0), # area for France
   dest_dir = "data/era5/FRA"

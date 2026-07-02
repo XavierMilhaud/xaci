@@ -20,3 +20,4 @@ A list with \code{data} (monthly aggregates) and \code{time}
 \description{
 Applies \code{FUN} within each calendar month.
 }
+\keyword{internal}

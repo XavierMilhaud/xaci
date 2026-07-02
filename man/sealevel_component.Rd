@@ -9,9 +9,9 @@ sealevel_component(
   study_period,
   reference_period,
   mask_path = NULL,
-  grid_cell = FALSE,
+  area = TRUE,
   max_dist_km = 500,
-  data_dir = paste0("data/psmsl/", country_abbrev),
+  sealevel_dir = paste0("data/psmsl/", country_abbrev),
   admin_level = NULL,
   admin_assignment = NULL,
   crs_metric = 4326,
@@ -24,24 +24,31 @@ sealevel_component(
 \arguments{
 \item{country_abbrev}{Three-letter country code (e.g. \code{"FRA"}).}
 
-\item{study_period}{Character vector \code{c("start", "end")}.}
+\item{study_period}{Character vector \code{c("start", "end")}. Required
+to filter and/or download PSMSL tide-gauge data (unlike ERA5-based
+components which read the full NetCDF file and filter in downstream steps).}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
 
 \item{mask_path}{Path to the country mask NetCDF. Used to extract the
-ERA5 grid when \code{grid_cell = TRUE}.}
+ERA5 grid when \code{area = FALSE}.}
 
-\item{grid_cell}{Logical. If \code{TRUE}, interpolates the standardised
-anomalies onto the ERA5 grid and returns a list with a
-\code{[nl x nw x nt]} array — consistent with all other component
-functions. If \code{FALSE} (default), returns a \code{data.frame} of
-station anomalies (national or per admin unit).}
+\item{area}{Logical. Mirrors the \code{area} argument of all other
+component functions: if \code{FALSE} (default), interpolates the
+standardised anomalies onto the ERA5 grid and returns a list with a
+\code{[lon x lat x t]} array — consistent with the grid-cell output of
+\code{temperature_component()}, \code{precipitation_component()}, etc.
+If \code{TRUE}, returns a \code{data.frame} of aggregated anomalies
+(national or per admin unit, depending on \code{admin_level}).}
 
 \item{max_dist_km}{Numeric. Maximum distance (km) for IDW interpolation.
-Only used when \code{grid_cell = TRUE}. Default \code{500}.}
+Only used when \code{area = FALSE}. Default \code{500}.}
 
-\item{data_dir}{Character or \code{NULL}. Path to PSMSL \code{.txt}
-files. If \code{NULL}, data are downloaded automatically.}
+\item{sealevel_dir}{Character or \code{NULL}. Path to the directory
+containing PSMSL \code{.txt} files. Named \code{sealevel_dir} for
+consistency with the \code{sealevel_dir} argument of
+\code{calculate_aci()}. If \code{NULL} or the directory does not exist,
+data are downloaded automatically.}
 
 \item{admin_level}{Integer or \code{NULL}. If not \code{NULL}, returns one
 column per admin unit. Ignored when \code{admin_assignment} is supplied.}
@@ -52,19 +59,24 @@ column per admin unit. Ignored when \code{admin_assignment} is supplied.}
 \item{crs_metric}{EPSG code used when building \code{admin_assignment}
 internally. Default \code{4326}.}
 
-\item{computed_components}{Logical. Default \code{FALSE}.}
+\item{computed_components}{Logical. If \code{TRUE}, reloads a previously
+saved \code{.rds} file from \code{load_dir}. Default \code{FALSE}.}
 
-\item{save}{Logical. Default \code{FALSE}.}
+\item{save}{Logical. If \code{TRUE}, saves the processed result to
+\code{save_dir}. Default \code{FALSE}.}
 
-\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+\item{save_dir}{Character. Directory for saving results.
+Default \code{"results/<country_abbrev>"}.}
 
-\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+\item{load_dir}{Character. Directory from which to reload a cached result
+when \code{computed_components = TRUE}.
+Default \code{"results/<country_abbrev>"}.}
 }
 \value{
-If \code{grid_cell = TRUE}: list with array
-  \code{[nl x nw x nt]}, \code{lon}, \code{lat}, \code{time}.
-  Otherwise: \code{data.frame} of station anomalies (national or per
-  admin unit).
+If \code{area = FALSE}: a list with a \code{[lon x lat x t]} array,
+  \code{lon}, \code{lat}, \code{time} — same structure as other grid-cell
+  components. If \code{area = TRUE}: a \code{data.frame} of station
+  anomalies (national or per admin unit).
 }
 \description{
 Calculate the sea-level component of the ACI

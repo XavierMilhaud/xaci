@@ -23,3 +23,4 @@ A \code{data.frame} named \code{"sealevel"} (national) or
 \description{
 Reduce sea-level data to a single column or one column per administrative unit
 }
+\keyword{internal}

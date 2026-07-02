@@ -68,7 +68,7 @@ calculate_rolling_sum <- function(dataset, var_name, window_size) {
 #'   sub-daily time steps).
 #' @param FUN      Aggregation function: \code{sum} or \code{mean}.
 #' @return A new list with daily \code{time} and aggregated \code{data}.
-#' @export
+#' @keywords internal
 resample_daily <- function(dataset, FUN = sum) {
   time  <- as.Date(dataset$time)
   data  <- dataset$data
@@ -101,7 +101,7 @@ resample_daily <- function(dataset, FUN = sum) {
 #' @param FUN Aggregation function. Default \code{mean}.
 #' @return A list with \code{data} (monthly aggregates) and \code{time}
 #'   (first day of each month as POSIXct).
-#' @export
+#' @keywords internal
 resample_monthly <- function(dataset, FUN = mean) {
   data      <- dataset$data
   time      <- dataset$time

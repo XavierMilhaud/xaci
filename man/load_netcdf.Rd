@@ -17,3 +17,4 @@ A list with fields: \code{data} (3D array), \code{lon}, \code{lat}, \code{time}.
 \description{
 Load a NetCDF variable as a 3D array [lon x lat x time]
 }
+\keyword{internal}

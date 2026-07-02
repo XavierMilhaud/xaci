@@ -453,19 +453,19 @@ plot_aci_components <- function(aci_df,
     p <- p +
       ggplot2::geom_area(alpha = 0.8, position = "stack") +
       ggplot2::scale_fill_manual(values = colours[components],
-                                 labels = labels_map[components],
+                                 labels = setNames(labels_map[components], components),
                                  name   = "Component")
   } else if (type == "line") {
     p <- p +
       ggplot2::geom_line(linewidth = 0.8) +
       ggplot2::scale_colour_manual(values = colours[components],
-                                   labels = labels_map[components],
+                                   labels = setNames(labels_map[components], components),
                                    name   = "Component")
   } else {
     p <- p +
       ggplot2::geom_col(position = "dodge") +
       ggplot2::scale_fill_manual(values = colours[components],
-                                 labels = labels_map[components],
+                                 labels = setNames(labels_map[components], components),
                                  name   = "Component")
   }
 

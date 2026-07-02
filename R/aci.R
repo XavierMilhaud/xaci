@@ -423,10 +423,12 @@ calculate_aci <- function(country_abbrev,
       study_period        = study_period,
       reference_period    = reference_period,
       mask_path           = mask_data_path,
-      grid_cell           = grid_cell_mode,   # TRUE if area=FALSE + admin_level=NULL
+      area                = area,   # TRUE if area=FALSE + admin_level=NULL
       max_dist_km         = max_dist_km,
-      data_dir            = sealevel_dir,
+      sealevel_dir        = sealevel_dir,
+      admin_level         = admin_level,
       admin_assignment    = admin_assignment,
+      crs_metric          = crs_metric,
       computed_components = FALSE,
       save                = save,
       save_dir            = save_dir

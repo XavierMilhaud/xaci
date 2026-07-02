@@ -16,3 +16,4 @@ A single merged \code{data.frame}.
 \description{
 Merge a list of data frames on their row-name index
 }
+\keyword{internal}

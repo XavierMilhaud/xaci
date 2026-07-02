@@ -40,7 +40,7 @@ test_that("standardize_metric standardise correctement un vecteur 1D", {
   expect_true(is.numeric(res))
   # La moyenne sur la période de référence doit être proche de 0
   ref_idx <- times >= as.POSIXct("1990-01-01", tz="UTC") &
-             times <= as.POSIXct("1991-12-31", tz="UTC")
+    times <= as.POSIXct("1991-12-31", tz="UTC")
   expect_lt(abs(mean(res[ref_idx], na.rm = TRUE)), 0.5)
 })
 
@@ -51,7 +51,7 @@ test_that("standardize_metric standardise correctement un vecteur 1D", {
 test_that("resample_daily agrège correctement par jour", {
   # 4 pas de temps sur 2 jours (2 par jour)
   time <- as.POSIXct(c("2000-01-01 00:00", "2000-01-01 12:00",
-                        "2000-01-02 00:00", "2000-01-02 12:00"),
+                       "2000-01-02 00:00", "2000-01-02 12:00"),
                      tz = "UTC")
   data <- array(c(1,3,2,4), dim = c(1,1,4))
   ds   <- list(data = data, time = time, lon = 0, lat = 0)
@@ -64,9 +64,10 @@ test_that("resample_daily agrège correctement par jour", {
 
 test_that("resample_monthly agrège correctement par mois", {
   time <- as.POSIXct(c("2000-01-15", "2000-01-20",
-                        "2000-02-10", "2000-02-25"), tz = "UTC")
+                       "2000-02-10", "2000-02-25"), tz = "UTC")
   vals <- c(10, 20, 30, 40)
-  res  <- resample_monthly(vals, time, FUN = mean)
+  ds   <- list(data = vals, time = time)
+  res  <- resample_monthly(ds, FUN = mean)
   expect_equal(length(res$data), 2)
   expect_equal(res$data[1], 15)   # mean(10,20)
   expect_equal(res$data[2], 35)   # mean(30,40)

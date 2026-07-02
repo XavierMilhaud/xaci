@@ -29,8 +29,11 @@ devtools::install(".")
 | `readr`          | Read the PSMSL CSV                            |
 | `ggplot2`        | Visualisation                                 |
 | `tidyr`          | Data reshaping                                |
-| `sf`             | Spatial operations                            |
-| `rnaturalearth`  | Administrative boundaries                     |
+| `sf`             | Spatial operations (masks, admin polygons)    |
+| `rnaturalearth`  | Worldwide coastline layer (sea-level factors) |
+| `geodata`        | Multi-level administrative boundaries (GADM)  |
+| `terra`          | Required by `geodata`                         |
+| `units`          | Unit handling in spatial distance calculations|
 
 Suggested (not required for core use):
 
@@ -38,82 +41,9 @@ Suggested (not required for core use):
 |---------------------|--------------------------------------------|
 | `ecmwfr`            | Download ERA5 data from Copernicus CDS     |
 | `rnaturalearthdata` | High-resolution natural earth data         |
-| `patchwork`         | Combine ggplot2 panels                     |
+| `patchwork`         | Combine ggplot2 panels (`plot_aci_dashboard()`) |
+| `gganimate`, `gifski` | Animated maps (`animate_aci_map()`)      |
 | `testthat`          | Unit tests                                 |
-
----
-
-## Required data
-
-Climate data are extracted from the
-[Copernicus Climate Data Store (ERA5)](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels).  
-Tide gauge data are automatically downloaded from [PSMSL](https://www.psmsl.org/data/obtaining/).
-
-Necessary NetCDF variables:
-
-| Variable  | Description                          |
-|-----------|--------------------------------------|
-| `t2m`     | 2-m air temperature (hourly)         |
-| `tp`      | Total precipitation (hourly)         |
-| `u10`     | U-component of 10-m wind (hourly)    |
-| `v10`     | V-component of 10-m wind (hourly)    |
-| `country` | Country land-sea mask (values in [0,1]) |
-
-> **Note:** The examples below require NetCDF files downloaded from the
-> Copernicus CDS. Replace the paths with the actual locations of your files
-> before running them.
-
----
-
-## Download ERA5 data and country mask
-
-The package includes functions to download directly from the
-[Copernicus CDS](https://cds.climate.copernicus.eu) via the
-[`ecmwfr`](https://bluegreen-labs.github.io/ecmwfr/) package (v2.0+,
-Personal Access Token required).
-
-### 1 · Store your CDS token (once per machine)
-
-```r
-install.packages("ecmwfr")
-library(xaci)
-
-# Your token: https://cds.climate.copernicus.eu → profile → Personal Access Token
-cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-```
-
-### 2 · Download ERA5 variables
-
-This step can take hours/days depending on the number of years and variables requested.
-
-```r
-# Download t2m (temperature), tp (precipitation), u10 and v10 (wind) for France, 1960–2024
-# One NetCDF per variable is produced in data/era5/
-download_era5_all(
-  years    = 1960:2024,
-  area     = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E
-  dest_dir = "data/era5/FRA/1960_2024"
-)
-
-# Or download a single variable:
-download_era5(
-  variable = "v10",
-  years    = 1960:2024,
-  area     = c(51.5, -5.5, 41.0, 10.0), # area for France
-  dest_dir = "data/era5/FRA"
-)
-```
-
-### 3 · Download the country mask
-
-```r
-download_mask(
-  country_abbrev = "FRA",
-  area      = c(51.5, -5.5, 41.0, 10.0),
-  dest_dir  = "data/era5/FRA"
-)
-# → data/era5/FRA/mask_FRA.nc  (variable: 'country', values in [0, 1])
-```
 
 ---
 
@@ -122,475 +52,193 @@ download_mask(
 All functions that refer to a country accept a single format for `country_abbrev`:
 a **three-letter ISO 3166-1 alpha-3 code** (e.g. `"FRA"`, `"GBR"`, `"DEU"`).
 The internal conversion to the format required by each library (PSMSL CSV,
-`rnaturalearth`) is handled automatically.
+GADM via `geodata::gadm()`) is handled automatically.
 
 ---
 
-## Quick use
+## Get started (first use of the package)
 
-### National ACI (scalar time series)
+Setting up `xaci` for a new country follows **four sequential steps**. Steps 1–3
+are one-off, heavy computations; step 4 is the fast, repeatable step you'll use
+day to day once steps 1–3 are done.
 
-This calculation can take several hours depending on the platform.
+```
+Step 1 (long)   Step 2 (short)   Step 3 (long)              Step 4 (fast, repeatable)
+ERA5 download → Country mask  → Grid-cell components     →  ACI / components at any
+(data/)          (data/)         (results/, cached .rds)     temporal & spatial level
+```
+
+### Step 1 · Download ERA5 data (long — can take hours to days)
+
+Climate data are extracted from the
+[Copernicus Climate Data Store (ERA5)](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels)
+via the [`ecmwfr`](https://bluegreen-labs.github.io/ecmwfr/) package (v2.0+,
+Personal Access Token required). Files are saved to `data/era5/<country_abbrev>/`.
 
 ```r
+install.packages("ecmwfr")
 library(xaci)
 
-result <- calculate_aci(
-  country_abbrev          = "FRA",
-  study_period            = c("2011-01-01", "2015-12-31"),
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
-  temperature_data_path   = "data/era5/FRA/t2m_2011_2015.nc",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  wind_u10_data_path      = "data/era5/FRA/u10_2011_2015.nc",
-  wind_v10_data_path      = "data/era5/FRA/v10_2011_2015.nc",
-  granularity             = "month",   # "month", "season", "semester", "year"
-  area                    = TRUE,      # aggregate at national level
-  factor                  = 0.2,       # proportion of country coastal line 
-  admin_level             = NULL,
-  crs_metric              = 2154,
-  save                    = TRUE       # cache grid-cell objects to results/
+# 1. Store your CDS token once per machine
+# (https://cds.climate.copernicus.eu -> profile -> Personal Access Token)
+cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+# 2. Download all four ERA5 variables (t2m, tp, u10, v10) for France, 1960-2024
+# One NetCDF per variable is produced in data/era5/FRA/
+download_era5_all(
+  years          = 1960:2024,
+  area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
+  country_abbrev = "FRA"
 )
 
-head(result)
+# Or download a single variable:
+download_era5(
+  variable       = "v10",
+  years          = 1960:2024,
+  area           = c(51.5, -5.5, 41.0, 10.0),
+  country_abbrev = "FRA"
+)
+```
+
+Required NetCDF variables:
+
+| Variable | Description                       |
+|----------|------------------------------------|
+| `t2m`    | 2-m air temperature (hourly)       |
+| `tp`     | Total precipitation (hourly)       |
+| `u10`    | U-component of 10-m wind (hourly)  |
+| `v10`    | V-component of 10-m wind (hourly)  |
+
+### Step 2 · Download the country mask (short)
+
+```r
+download_mask(
+  country_abbrev = "FRA",
+  area           = c(51.5, -5.5, 41.0, 10.0),
+  dest_dir       = "data/era5/FRA"
+)
+# -> data/era5/FRA/mask_FRA.nc  (variable: 'country', values in [0, 1])
+```
+
+The mask is used by `apply_mask()` / `load_component()` to restrict grid cells
+to the country's land area (threshold on the land fraction, default `0.8`).
+
+### Step 3 · Compute components at grid-cell level (long, one-off per period)
+
+This is the heavy step: for each of the five components (temperature high/low,
+precipitation, drought, wind — sea level is handled separately from PSMSL
+data), `xaci` computes standardised anomalies at the **finest possible
+granularity**: individual ERA5 grid cells, monthly time steps. The resulting
+objects are cached as `.rds` files in `results/<country_abbrev>/`, so this
+step never needs to be repeated for a given `country_abbrev` /
+`reference_period` combination — later re-aggregation (step 4) simply reloads
+them.
+
+The simplest way to run step 3 is via `calculate_aci()` itself, with `save = TRUE`:
+
+```r
+calculate_aci(
+  country_abbrev    = "FRA",
+  study_period      = c("2011-01-01", "2015-12-31"),
+  reference_period  = c("2011-01-01", "2013-12-31"),
+  years             = 2011:2015,        # used to build default ERA5 file paths
+  granularity       = "month",
+  area              = TRUE,
+  factor            = 1 / 5,
+  admin_level       = NULL,
+  save              = TRUE,             # <- cache grid-cell .rds files
+  save_dir          = "results/FRA",
+  computed_components = FALSE           # <- force (re)computation
+)
+
+# Produces, in results/FRA/:
+#   temperature_t90_2011_2013.rds
+#   temperature_t10_2011_2013.rds
+#   precipitation_2011_2013.rds
+#   drought_2011_2013.rds
+#   wind_2011_2013.rds
+#   sealevel_2011_2013.rds
+```
+
+Components can also be computed one at a time (e.g. to parallelise the work,
+or recompute a single component after a data update) — see
+[Computing individual components](#computing-individual-components) below.
+
+### Step 4 · Deploy the computations at any granularity (fast, repeatable)
+
+Once step 3's `.rds` objects exist in `results/<country_abbrev>/`, any
+subsequent call with `computed_components = TRUE` **reloads** them instead of
+recomputing from the NetCDF files, and re-aggregates on the fly to whichever
+temporal granularity (`"month"`, `"season"`, `"semester"`, `"year"`) and
+spatial level (national, grid-cell, administrative unit) you ask for. This is
+the step you'll run repeatedly while exploring the data.
+
+```r
+# Monthly national ACI, no re-computation
+monthly_national_aci_FRA <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2011-01-01", "2015-12-31"),
+  reference_period    = c("2011-01-01", "2013-12-31"),
+  granularity         = "month",
+  area                = TRUE,
+  factor              = 1 / 5,
+  admin_level         = NULL,
+  load_dir            = "results/FRA",
+  computed_components = TRUE            # <- reload cached components
+)
+
+head(monthly_national_aci_FRA)
 #            drought  wind  precipitation   t10   t90  sealevel   ACI
 # 2011-01  ...
-```
 
-### Saving and reloading intermediate results
-
-Long ERA5 computations produce grid-cell-level objects that can be saved once
-and reloaded to study the ACI at different spatial or temporal resolutions
-without re-running the heavy calculations.
-
-**Step 1 — compute once and save (heavy computations)**
-
-```r
-calculate_aci(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  years = 2011:2015,
-  granularity = "month",
-  area = TRUE,
-  factor = 1 / 5,
-  admin_level = NULL,
-  crs_metric  = 2154,
-  save = TRUE,            # save grid-cell .rds files
-  save_dir = paste("results/", country_abbrev, sep==""),
-  computed_components = FALSE
-)
-
-# Produces:
-#   results/FRA/temperature_highs_2011_2013.rds
-#   results/FRA/temperature_lows_2011_2013.rds
-#   results/FRA/precipitation_2011_2013.rds
-#   results/FRA/drought_2011_2013.rds
-#   results/FRA/wind_2011_2013.rds
-#   results/FRA/sealevel_2011_2013.rds
-# (period tag derived from reference_period)
-```
-
-In addition to the computation of the ACI, all computations have been saved for each component at the ERA5 grid cell level 
-(defined from downloaded data), at a monthly time step. It is therefore not interesting to run once again the computations for 
-each component. However, the computations can be performed component-wise instead of for the whole set of components, if necessary.
-
-
-**Step 2 — reload and re-aggregate freely**
-
-Once obtained the objects corresponding to monthly calculations of ACI components at the grid cell level, it is quite
-straightforward to perform the computation of the ACI or its components, whatever the time aggregation or spatial 
-aggregation specified by the user.
-
-```r
-# Monthly national index, no re-computation
-monthly_national_aci_FRA <- calculate_aci(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  years = 2011:2015,
-  temperature_data_path = NULL,
-  precipitation_data_path = NULL,
-  wind_u10_data_path = NULL,
-  wind_v10_data_path = NULL,
-  mask_data_path = NULL,
-  sealevel_dir = NULL,
-  percentile_high = 90,
-  percentile_low = 10,
-  granularity = "month",
-  area = TRUE,
-  factor = 0.2,
-  max_dist_km = 500,
-  admin_level = NULL,
-  crs_metric = 2154,
-  save = FALSE,
-  load_dir = paste0("results/", country_abbrev),
-  computed_components = TRUE
-)
-
-plot_aci_timeseries(aci_df = monthly_national_aci_FRA, smooth = TRUE, span = 0.2, fill_area = TRUE)
-plot_aci_components(monthly_national_aci_FRA, type = "bar")
-plot_aci_components(monthly_national_aci_FRA, type = "bar", components = c("t90","t10"))
-plot_aci_components(monthly_national_aci_FRA, type = "stacked", components = "sealevel")
-plot_aci_distribution(monthly_national_aci_FRA, type = "violin")
-plot_aci_distribution(monthly_national_aci_FRA, type = "density")
-
-# Seasonal national index, no re-computation
+# Same underlying data, different aggregation - no recomputation needed:
 seasonal_national_aci_FRA <- calculate_aci(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  years = 2011:2015,
-  granularity = "season",
-  area = TRUE,
-  factor = 0.2,
-  load_dir = paste0("results/", country_abbrev),
+  country_abbrev      = "FRA",
+  study_period        = c("2011-01-01", "2015-12-31"),
+  reference_period    = c("2011-01-01", "2013-12-31"),
+  granularity         = "season",
+  area                = TRUE,
+  load_dir            = "results/FRA",
   computed_components = TRUE
 )
 
-plot_aci_timeseries(aci_df = seasonal_national_aci_FRA, smooth = TRUE, span = 0.2, fill_area = TRUE)
-plot_aci_components(seasonal_national_aci_FRA, type = "bar")
-plot_aci_components(seasonal_national_aci_FRA, type = "bar", components = c("t90"))
-plot_aci_components(seasonal_national_aci_FRA, type = "stacked", components = "sealevel")
-plot_aci_distribution(seasonal_national_aci_FRA, components = c("t90"), type = "boxplot", include_aci = TRUE)
-plot_aci_distribution(seasonal_national_aci_FRA, type = "violin")
-
-
-# By department, no re-computation
-calculate_aci(
-  ...,
-  computed_components = TRUE,
-  load_dir            = "results",
+# By administrative unit (department, admin_level = 2) instead of national:
+dept_aci_FRA <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2011-01-01", "2015-12-31"),
+  reference_period    = c("2011-01-01", "2013-12-31"),
+  granularity         = "month",
   admin_level         = 2,
-  crs_metric          = 2154
-)
-```
-
-### Grid-cell level output (for mapping)
-
-Setting `area = FALSE` with `admin_level = NULL` returns a named list of
-standardised grid-cell objects instead of a scalar time series. This is the
-entry point for cartographic visualisation.
-
-```r
-country_abbrev <- "FRA"
-
-monthlyACI_gridCell <- calculate_aci(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  years = 2011:2015,
-  granularity = "month",
-  area = FALSE,
-  factor = 0.2,
-  max_dist_km = 500,
-  admin_level = NULL,
-  crs_metric = 2154,
-  save = FALSE,
-  load_dir = paste0("results/", country_abbrev),
+  crs_metric          = 2154,           # Lambert-93 for France
+  load_dir            = "results/FRA",
   computed_components = TRUE
 )
 
-# monthlyACI_gridCell$lon          : longitude vector
-# monthlyACI_gridCell$lat          : latitude vector
-# monthlyACI_gridCell$t10          : array [lon x lat x time]
-# monthlyACI_gridCell$t90          : array [lon x lat x time]
-# monthlyACI_gridCell$precipitation: array [lon x lat x time]
-# monthlyACI_gridCell$drought      : array [lon x lat x time]
-# monthlyACI_gridCell$wind         : array [lon x lat x time]
-# monthlyACI_gridCell$sealevel     : array [lon x lat x time]
-# monthlyACI_gridCell$ACI          : array [lon x lat x time]
+# Full spatial grid, for mapping (area = FALSE, admin_level = NULL):
+grid_aci_FRA <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2011-01-01", "2015-12-31"),
+  reference_period    = c("2011-01-01", "2013-12-31"),
+  granularity         = "month",
+  area                = FALSE,
+  admin_level         = NULL,
+  max_dist_km         = 500,
+  load_dir            = "results/FRA",
+  computed_components = TRUE
+)
+# grid_aci_FRA$lon / $lat        : coordinate vectors
+# grid_aci_FRA$t90, $t10,
+#   $precipitation, $drought,
+#   $wind, $sealevel, $ACI       : arrays [lon x lat x time]
+
+plot_aci_timeseries(monthly_national_aci_FRA, smooth = TRUE, span = 0.2)
+plot_aci_components(monthly_national_aci_FRA, type = "bar")
+plot_aci_map(grid_aci_FRA, variable = "ACI", time_index = "mean")
+plot_aci_map(dept_aci_FRA, variable = "ACI", time_index = "mean")
 ```
 
-Visualisation:
-
-```r
-# Maps precipitation from observed ERA5 data:
-ds <- load_component("data/era5/FRA/t2m_2011_2015.nc", "t2m",
-                     mask_path = "data/era5/FRA/mask_FRA.nc")
-plot_aci_map(ds, time_index = "mean", var_label = "Temperature (K)", title = "Mean temperature")
-# hourly data from Copernicus: 5 years x 365,25 days x 24 hours = 43830
-plot_aci_map(ds, time_index = 43000, var_label = "Temperature (K)", title = "Mean temperature")
-
-# Maps precipitation from the computed precipitation component of the ACI:
-plot_aci_map(monthlyACI_gridCell, variable = "ACI", time_index = "mean", var_label = "ACI", title = "Mean ACI")
-plot_aci_map(monthlyACI_gridCell$ACI, time_index = "mean", var_label = "ACI", title = "Mean ACI")
-# Now map for the two last months of the study period (59th and 60th):
-plot_aci_map(monthlyACI_gridCell, variable = "t90", time_index = 60, var_label = "Temperature (C)", title = "t90")
-```
-
----
-
-## Computing individual components
-
-Each component can be called independently. All accept `save = TRUE` /
-`save_dir` to cache their grid-cell object, and `area = FALSE` to return the
-full spatial array.
-
-```r
-precipitation_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  var_name = "tp", window_size = 5L,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-
-drought_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-
-wind_component(
-  country_abbrev = "FRA",
-  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
-  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-
-temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_1960_2024.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2061-01-01", "1990-12-31"),
-  percentile = 90, extremum = "max", above_thresholds = TRUE,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components   = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-
-temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  percentile = 10, extremum = "min", above_thresholds = FALSE,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components   = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-
-sealevel_component(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  grid_cell = TRUE,
-  max_dist_km = 500,
-  data_dir = NULL, 
-  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
-  computed_components = FALSE, save = TRUE, save_dir = paste0("results/", country_abbrev)
-)
-```
-
-
-### National scalar output (`area = TRUE`)
-
-```r
-prec <- precipitation_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  var_name = "tp", window_size = 5L,
-  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-drought <- drought_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-wind <- wind_component(
-  country_abbrev = "FRA",
-  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
-  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-# T90 (hot days)
-t_hot <- temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path = NULL,
-  reference_period = c("2011-01-01", "2013-12-31"),
-  percentile = 90, extremum = "max", above_thresholds = TRUE,
-  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-# T10 (cold nights)
-t_low <- temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path = NULL,
-  reference_period = c("2011-01-01", "2013-12-31"),
-  percentile = 10, extremum = "min", above_thresholds = FALSE,
-  area = TRUE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-sealevel <- sealevel_component(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  grid_cell = FALSE,
-  max_dist_km = 500,
-  data_dir = NULL, 
-  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-```
-
-### Grid-cell level output (`area = FALSE`)
-
-```r
-# Full spatial array — suitable for mapping
-prec_grid <- precipitation_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  var_name = "tp", window_size = 5L,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-plot_aci_map(...)
-
-drought_grid <- drought_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-wind_grid <- wind_component(
-  country_abbrev = "FRA",
-  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
-  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-# T90 (hot days)
-t_hot_grid <- temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path = NULL,
-  reference_period = c("2011-01-01", "2013-12-31"),
-  percentile = 90, extremum = "max", above_thresholds = TRUE,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-# T10 (cold nights)
-t_low_grid <- temperature_component(
-  country_abbrev = "FRA",
-  temperature_data_path = "data/era5/FRA/t2m_2011_2015.nc",
-  mask_path = NULL,
-  reference_period = c("2011-01-01", "2013-12-31"),
-  percentile = 10, extremum = "min", above_thresholds = FALSE,
-  area = FALSE, admin_level = NULL, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-sealevel_grid <- sealevel_component(
-  country_abbrev = "FRA",
-  study_period = c("2011-01-01", "2015-12-31"),
-  reference_period = c("2011-01-01", "2013-12-31"),
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  grid_cell = TRUE,
-  max_dist_km = 500,
-  data_dir = NULL, 
-  admin_level = NULL, admin_assignment = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-```
-
-### Administrative unit level
-
-Build the spatial mask once, then pass it to any component:
-
-```r
-prec_administrativeLevel1 <- precipitation_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  var_name = "tp", window_size = 5L,
-  area = FALSE, admin_level = 1, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-plot_aci_map(prec_administrativeLevel1)
-
-
-prec_administrativeLevel2 <- precipitation_component(
-  country_abbrev = "FRA",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  mask_path = "data/era5/FRA/mask_FRA.nc",
-  reference_period = c("2011-01-01", "2013-12-31"),
-  var_name = "tp", window_size = 5L,
-  area = FALSE, admin_level = 2, admin_mask = NULL, crs_metric = 2154,
-  computed_components = TRUE, save = FALSE, load_dir = paste0("results/", country_abbrev)
-)
-
-
-
-# Sea level assignment for administrative units
-dept_assignment <- assign_sealevel_to_admin(
-  country_abbrev = "FRA",
-  admin_level    = 1,
-  crs_metric     = 2154
-)
-sealevel_component(country_abbrev = "FRA", 
-                   study_period = c("2011-01-01","2015-12-31"), 
-                   reference_period = c("2011-01-01","2013-12-31"),
-                   data_dir = NULL,
-                   admin_assignment = dept_assignment,
-                   save = FALSE
-)
-```
-
-### ACI by administrative unit
-
-```r
-result_dept <- calculate_aci(
-  temperature_data_path   = "data/era5/FRA/t2m_2011_2015.nc",
-  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
-  wind_u10_data_path      = "data/era5/FRA/u10_2011_2015.nc",
-  wind_v10_data_path      = "data/era5/FRA/v10_2011_2015.nc",
-  country_abbrev          = "FRA",
-  mask_data_path          = "data/era5/FRA/mask_FRA.nc",
-  study_period            = c("2011-01-01", "2015-12-31"),
-  reference_period        = c("2011-01-01", "2013-12-31"),
-  granularity             = "month",
-  admin_level             = 1,
-  crs_metric              = 2154,
-  save                    = FALSE,
-  load_dir                = "results",
-  computed_components     = TRUE
-)
-```
+> **Note:** the examples above require NetCDF files downloaded in steps 1–2,
+> or cached `.rds` files from step 3. Replace paths and periods with your own.
 
 ---
 
@@ -599,18 +247,178 @@ result_dept <- calculate_aci(
 $$ACI = \frac{T_{90} - T_{10} + P + D + \alpha \cdot SL + W}{5 + \alpha}$$
 
 | Symbol | Component                                   |
-|--------|---------------------------------------------|
-| T₉₀   | Frequency of hot days (percentile 90)        |
-| T₁₀   | Frequency of cold nights (percentile 10)     |
-| P      | Maximum sliding precipitation (5-day window) |
-| D      | Consecutive dry days (CDD)                   |
-| SL     | Standardised sea level                       |
-| W      | Wind power above 90th percentile             |
+|--------|-----------------------------------------------|
+| T₉₀    | Frequency of hot days (percentile 90)         |
+| T₁₀    | Frequency of cold nights (percentile 10)      |
+| P      | Maximum sliding precipitation (5-day window)  |
+| D      | Consecutive dry days (CDD)                    |
+| SL     | Standardised sea level                        |
+| W      | Wind power above 90th percentile              |
 | α      | Coastal fraction (default = 1/5 nationally; computed per unit at administrative level) |
 
 At the administrative level, α is computed automatically per unit as the ratio
-of coastal length to total perimeter. Units without tide-gauge stations use
-α = 0 and a denominator of 5.
+of coastal length to total perimeter (`assign_sealevel_to_admin()`). Units
+without tide-gauge stations use α = 0 and a denominator of 5. At grid-cell
+level, α ∈ {0, 1} depending on whether a cell lies within `max_dist_km` of a
+tide-gauge station.
+
+---
+
+## Computing individual components
+
+Each component can be called independently — useful to recompute a single
+component after a data update, or to inspect one component's output without
+running the full `calculate_aci()` pipeline. All accept `save = TRUE` /
+`save_dir` to cache their grid-cell object (step 3), and `computed_components
+= TRUE` / `load_dir` to reload it (step 4). All accept `area = FALSE` to
+return the full spatial array, or `admin_level` to aggregate per
+administrative unit.
+
+```r
+# --- Step 3 equivalent: compute and cache one component ---
+precipitation_component(
+  country_abbrev          = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path               = "data/era5/FRA/mask_FRA.nc",
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  var_name                = "tp", window_size = 5L,
+  area                    = FALSE, admin_level = NULL,
+  save                    = TRUE, save_dir = "results/FRA"
+)
+
+drought_component(
+  country_abbrev          = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path               = "data/era5/FRA/mask_FRA.nc",
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  area                    = FALSE, admin_level = NULL,
+  save                    = TRUE, save_dir = "results/FRA"
+)
+
+wind_component(
+  country_abbrev     = "FRA",
+  wind_u10_data_path = "data/era5/FRA/u10_2011_2015.nc",
+  wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
+  mask_path          = "data/era5/FRA/mask_FRA.nc",
+  reference_period   = c("2011-01-01", "2013-12-31"),
+  area               = FALSE, admin_level = NULL,
+  save               = TRUE, save_dir = "results/FRA"
+)
+
+# T90 (hot days) and T10 (cold nights) both come from temperature_component(),
+# with different percentile/extremum/above_thresholds arguments:
+temperature_component(
+  country_abbrev         = "FRA",
+  temperature_data_path  = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path              = "data/era5/FRA/mask_FRA.nc",
+  reference_period       = c("2011-01-01", "2013-12-31"),
+  percentile = 90, extremum = "max", above_thresholds = TRUE,
+  area = FALSE, admin_level = NULL,
+  save = TRUE, save_dir = "results/FRA"
+)
+temperature_component(
+  country_abbrev         = "FRA",
+  temperature_data_path  = "data/era5/FRA/t2m_2011_2015.nc",
+  mask_path              = "data/era5/FRA/mask_FRA.nc",
+  reference_period       = c("2011-01-01", "2013-12-31"),
+  percentile = 10, extremum = "min", above_thresholds = FALSE,
+  area = FALSE, admin_level = NULL,
+  save = TRUE, save_dir = "results/FRA"
+)
+
+# Sea level: area = TRUE returns station/admin anomalies, area = FALSE
+# interpolates onto the ERA5 grid via IDW (needs mask_path for lon/lat).
+sealevel_component(
+  country_abbrev   = "FRA",
+  study_period     = c("2011-01-01", "2015-12-31"),
+  reference_period = c("2011-01-01", "2013-12-31"),
+  mask_path        = "data/era5/FRA/mask_FRA.nc",
+  area             = FALSE,
+  max_dist_km      = 500,
+  sealevel_dir     = NULL,     # NULL -> auto-download from PSMSL
+  save             = TRUE, save_dir = "results/FRA"
+)
+
+# --- Step 4 equivalent: reload cached components (fast) ---
+prec_national <- precipitation_component(
+  country_abbrev          = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path               = "data/era5/FRA/mask_FRA.nc",
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  area                    = TRUE,
+  computed_components     = TRUE, load_dir = "results/FRA"
+)
+
+sealevel_national <- sealevel_component(
+  country_abbrev   = "FRA",
+  study_period     = c("2011-01-01", "2015-12-31"),
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area             = TRUE,
+  computed_components = TRUE, load_dir = "results/FRA"
+)
+```
+
+### Administrative unit level
+
+Build the spatial mask once, then pass it to any component to avoid
+rebuilding it on every call:
+
+```r
+admin_mask_L1 <- build_admin_mask(
+  lon = grid_aci_FRA$lon, lat = grid_aci_FRA$lat,
+  country_abbrev = "FRA", admin_level = 1, crs_metric = 2154
+)
+
+prec_admin_L1 <- precipitation_component(
+  country_abbrev          = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path               = "data/era5/FRA/mask_FRA.nc",
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  area                    = FALSE,
+  admin_mask              = admin_mask_L1,
+  computed_components     = TRUE, load_dir = "results/FRA"
+)
+plot_aci_map(prec_admin_L1, variable = "precipitation")
+
+# Sea-level factors (coastal fraction) per administrative unit:
+dept_assignment <- assign_sealevel_to_admin(
+  country_abbrev = "FRA", admin_level = 1, crs_metric = 2154
+)
+sealevel_component(
+  country_abbrev   = "FRA",
+  study_period     = c("2011-01-01", "2015-12-31"),
+  reference_period = c("2011-01-01", "2013-12-31"),
+  area             = TRUE,
+  admin_assignment = dept_assignment
+)
+```
+
+---
+
+## Visualisation
+
+```r
+plot_aci_timeseries(monthly_national_aci_FRA, smooth = TRUE, span = 0.2, fill_area = TRUE)
+plot_aci_components(monthly_national_aci_FRA, type = "bar")
+plot_aci_components(monthly_national_aci_FRA, type = "stacked", components = "sealevel")
+plot_aci_distribution(monthly_national_aci_FRA, type = "violin")
+plot_aci_distribution(monthly_national_aci_FRA, type = "boxplot", components = "t90", include_aci = TRUE)
+
+# Grid-cell / raster map (mean over the whole period, or a single time slice):
+plot_aci_map(grid_aci_FRA, variable = "ACI", time_index = "mean",
+             var_label = "ACI", title = "Mean ACI, France")
+plot_aci_map(grid_aci_FRA$ACI, time_index = "mean")   # bare array also works
+plot_aci_map(grid_aci_FRA, variable = "t90", time_index = 60)
+
+# Administrative choropleth (same function, dispatches on data.frame input):
+plot_aci_map(dept_aci_FRA, variable = "ACI", time_index = "mean")
+
+# Combined dashboard (requires the 'patchwork' package):
+plot_aci_dashboard(monthly_national_aci_FRA)
+
+# Animated map over time (requires 'gganimate' and 'gifski'):
+animate_aci_map(grid_aci_FRA, variable = "ACI")
+```
 
 ---
 
@@ -626,7 +434,7 @@ xaci/
 │   ├── drought.R        # Drought component (CDD)
 │   ├── wind.R           # Wind component
 │   ├── sealevel.R       # Sea-level component (PSMSL)
-│   ├── utils.R          # Shared utilities (standardisation, aggregation, …)
+│   ├── utils.R          # Shared utilities (standardisation, aggregation, masks...)
 │   ├── download.R       # ERA5 and mask download helpers
 │   └── visualization.R  # Plotting functions
 ├── inst/
@@ -639,6 +447,14 @@ xaci/
 ├── NAMESPACE
 └── LICENSE
 ```
+
+Locally, computations are organised into two directories (both git-ignored,
+see `.gitignore`):
+
+| Directory   | Content                                                        |
+|-------------|-----------------------------------------------------------------|
+| `data/`     | Downloaded ERA5 NetCDFs (steps 1–2) and PSMSL tide-gauge files |
+| `results/`  | Cached grid-cell-level component objects, `.rds` (step 3)      |
 
 ---
 

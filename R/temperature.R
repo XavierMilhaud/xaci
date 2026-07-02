@@ -236,3 +236,4 @@ temperature_component <- function(temperature_data_path,
   reduce_dataarray_to_dataframe(standardized, column_name = col_prefix,
                                 admin_mask = admin_mask)
 }
+

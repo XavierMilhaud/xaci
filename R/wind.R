@@ -139,10 +139,10 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
 #'
 #' @param wind_u10_data_path Path to the u10 NetCDF file.
 #' @param wind_v10_data_path Path to the v10 NetCDF file.
-#' @param mask_path          Path to the country mask NetCDF file, or
-#'   \code{NULL}.
 #' @param country_abbrev     Three-letter ISO country code.
 #' @param reference_period   Character vector \code{c("start", "end")}.
+#' @param mask_path          Path to the country mask NetCDF file, or
+#'   \code{NULL}.
 #' @param area               Logical. Default \code{FALSE}.
 #' @param admin_level        Integer or \code{NULL}.
 #' @param admin_mask         Output of \code{build_admin_mask()}, or
@@ -157,9 +157,9 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
 #' @export
 wind_component <- function(wind_u10_data_path,
                            wind_v10_data_path,
-                           mask_path             = NULL,
                            country_abbrev,
                            reference_period,
+                           mask_path             = NULL,
                            area                  = FALSE,
                            admin_level           = NULL,
                            admin_mask            = NULL,

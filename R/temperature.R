@@ -152,9 +152,9 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #' standardises relative to the reference period.
 #'
 #' @param temperature_data_path Path to the hourly \code{t2m} NetCDF file.
-#' @param mask_path             Path to the country mask NetCDF file.
 #' @param country_abbrev        Three-letter ISO country code.
 #' @param reference_period      Character vector \code{c("start", "end")}.
+#' @param mask_path             Path to the country mask NetCDF file.
 #' @param percentile            Percentile for the threshold. Default \code{90}.
 #' @param extremum              \code{"max"} (hot) or \code{"min"} (cold).
 #' @param above_thresholds      Logical. Default \code{TRUE}.
@@ -171,9 +171,9 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #'   per admin unit.
 #' @export
 temperature_component <- function(temperature_data_path,
-                                  mask_path             = NULL,
                                   country_abbrev,
                                   reference_period,
+                                  mask_path             = NULL,
                                   percentile            = 90,
                                   extremum              = "max",
                                   above_thresholds      = TRUE,

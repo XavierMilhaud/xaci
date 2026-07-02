@@ -55,7 +55,7 @@ max_consecutive_dry_days <- function(dataset) {
   }
 
   annual_time <- as.POSIXct(paste0(years, "-12-31"), format = "%Y-%m-%d",
-                             tz = "UTC")
+                            tz = "UTC")
   list(data = out, time = annual_time, lon = dataset$lon, lat = dataset$lat)
 }
 
@@ -112,13 +112,13 @@ drought_interpolate <- function(cdd_annual) {
 #' Computes standardised consecutive dry days.
 #'
 #' @param precipitation_data_path Path to the precipitation NetCDF file.
-#' @param mask_path               Path to the country mask NetCDF file, or
-#'   \code{NULL}.
 #' @param country_abbrev          Three-letter ISO country code (e.g.
 #'   \code{"FRA"}). Used to build \code{save_dir}/\code{load_dir} defaults
 #'   and to construct the admin mask when \code{admin_level} is not
 #'   \code{NULL}.
 #' @param reference_period        Character vector \code{c("start", "end")}.
+#' @param mask_path               Path to the country mask NetCDF file, or
+#'   \code{NULL}.
 #' @param area                    Logical. If \code{TRUE} return national
 #'   spatial mean as a named numeric vector. Ignored when \code{admin_level}
 #'   or \code{admin_mask} is not \code{NULL}. Default \code{FALSE}.
@@ -140,9 +140,9 @@ drought_interpolate <- function(cdd_annual) {
 #'   (\code{area = FALSE}), or \code{data.frame} per admin unit.
 #' @export
 drought_component <- function(precipitation_data_path,
-                              mask_path             = NULL,
                               country_abbrev,
                               reference_period,
+                              mask_path             = NULL,
                               area                  = FALSE,
                               admin_level           = NULL,
                               admin_mask            = NULL,

@@ -48,10 +48,10 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #' rolling 5-day window.
 #'
 #' @param precipitation_data_path Path to the precipitation NetCDF file.
-#' @param mask_path               Path to the country mask NetCDF file, or
-#'   \code{NULL}.
 #' @param country_abbrev          Three-letter ISO country code.
 #' @param reference_period        Character vector \code{c("start", "end")}.
+#' @param mask_path               Path to the country mask NetCDF file, or
+#'   \code{NULL}.
 #' @param var_name                Variable name in the NetCDF. Default
 #'   \code{"tp"}.
 #' @param window_size             Rolling window in days. Default \code{5}.
@@ -68,9 +68,9 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #'   per admin unit.
 #' @export
 precipitation_component <- function(precipitation_data_path,
-                                    mask_path             = NULL,
                                     country_abbrev,
                                     reference_period,
+                                    mask_path             = NULL,
                                     var_name              = "tp",
                                     window_size           = 5L,
                                     area                  = FALSE,

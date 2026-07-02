@@ -6,9 +6,9 @@
 \usage{
 temperature_component(
   temperature_data_path,
-  mask_path = NULL,
   country_abbrev,
   reference_period,
+  mask_path = NULL,
   percentile = 90,
   extremum = "max",
   above_thresholds = TRUE,
@@ -25,11 +25,11 @@ temperature_component(
 \arguments{
 \item{temperature_data_path}{Path to the hourly \code{t2m} NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file.}
-
 \item{country_abbrev}{Three-letter ISO country code.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{mask_path}{Path to the country mask NetCDF file.}
 
 \item{percentile}{Percentile for the threshold. Default \code{90}.}
 

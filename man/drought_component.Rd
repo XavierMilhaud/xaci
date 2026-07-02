@@ -6,9 +6,9 @@
 \usage{
 drought_component(
   precipitation_data_path,
-  mask_path = NULL,
   country_abbrev,
   reference_period,
+  mask_path = NULL,
   area = FALSE,
   admin_level = NULL,
   admin_mask = NULL,
@@ -22,15 +22,15 @@ drought_component(
 \arguments{
 \item{precipitation_data_path}{Path to the precipitation NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file, or
-\code{NULL}.}
-
 \item{country_abbrev}{Three-letter ISO country code (e.g.
 \code{"FRA"}). Used to build \code{save_dir}/\code{load_dir} defaults
 and to construct the admin mask when \code{admin_level} is not
 \code{NULL}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{mask_path}{Path to the country mask NetCDF file, or
+\code{NULL}.}
 
 \item{area}{Logical. If \code{TRUE} return national
 spatial mean as a named numeric vector. Ignored when \code{admin_level}

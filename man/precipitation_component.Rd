@@ -6,9 +6,9 @@
 \usage{
 precipitation_component(
   precipitation_data_path,
-  mask_path = NULL,
   country_abbrev,
   reference_period,
+  mask_path = NULL,
   var_name = "tp",
   window_size = 5L,
   area = FALSE,
@@ -24,12 +24,12 @@ precipitation_component(
 \arguments{
 \item{precipitation_data_path}{Path to the precipitation NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file, or
-\code{NULL}.}
-
 \item{country_abbrev}{Three-letter ISO country code.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{mask_path}{Path to the country mask NetCDF file, or
+\code{NULL}.}
 
 \item{var_name}{Variable name in the NetCDF. Default
 \code{"tp"}.}

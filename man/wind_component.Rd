@@ -7,9 +7,9 @@
 wind_component(
   wind_u10_data_path,
   wind_v10_data_path,
-  mask_path = NULL,
   country_abbrev,
   reference_period,
+  mask_path = NULL,
   area = FALSE,
   admin_level = NULL,
   admin_mask = NULL,
@@ -25,12 +25,12 @@ wind_component(
 
 \item{wind_v10_data_path}{Path to the v10 NetCDF file.}
 
-\item{mask_path}{Path to the country mask NetCDF file, or
-\code{NULL}.}
-
 \item{country_abbrev}{Three-letter ISO country code.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{mask_path}{Path to the country mask NetCDF file, or
+\code{NULL}.}
 
 \item{area}{Logical. Default \code{FALSE}.}
 

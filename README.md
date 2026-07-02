@@ -177,6 +177,7 @@ the step you'll run repeatedly while exploring the data.
 # Monthly national ACI, no re-computation
 monthly_national_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
+  years = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "month",
@@ -194,6 +195,7 @@ head(monthly_national_aci_FRA)
 # Same underlying data, different aggregation - no recomputation needed:
 seasonal_national_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
+  years = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "season",
@@ -201,10 +203,12 @@ seasonal_national_aci_FRA <- calculate_aci(
   load_dir            = "results/FRA",
   computed_components = TRUE
 )
+head(seasonal_national_aci_FRA)
 
 # By administrative unit (department, admin_level = 2) instead of national:
 dept_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
+  years = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "month",
@@ -213,10 +217,12 @@ dept_aci_FRA <- calculate_aci(
   load_dir            = "results/FRA",
   computed_components = TRUE
 )
+dim(dept_aci_FRA)  # 96 departments over 7 variables (ACI and its 6 components) = 672 columns
 
 # Full spatial grid, for mapping (area = FALSE, admin_level = NULL):
 grid_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
+  years = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "month",
@@ -230,6 +236,9 @@ grid_aci_FRA <- calculate_aci(
 # grid_aci_FRA$t90, $t10,
 #   $precipitation, $drought,
 #   $wind, $sealevel, $ACI       : arrays [lon x lat x time]
+
+# dim(grid_aci_FRA$sealevel)
+# grid_aci_FRA$sealevel : only NA values, unexpected: some ERA5 cells are coastal!
 
 plot_aci_timeseries(monthly_national_aci_FRA, smooth = TRUE, span = 0.2)
 plot_aci_components(monthly_national_aci_FRA, type = "bar")
@@ -335,7 +344,7 @@ sealevel_component(
   mask_path        = "data/era5/FRA/mask_FRA.nc",
   area             = FALSE,
   max_dist_km      = 500,
-  sealevel_dir     = NULL,     # NULL -> auto-download from PSMSL
+  sealevel_dir     = NULL,     # -> auto-download from PSMSL
   save             = TRUE, save_dir = "results/FRA"
 )
 

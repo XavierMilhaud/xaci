@@ -412,8 +412,29 @@ interpolate_sealevel_to_grid <- function(raw, lon, lat,
   # Aligner les colonnes de df sur l'ordre de coords
   val_mat <- t(as.matrix(df[, coords$station_id, drop = FALSE]))
 
-  # --- Interpolation matricielle [n_cells x nt] ---
-  interp_mat <- weights_norm %*% val_mat
+  # --- Interpolation matricielle [n_cells x nt], instant par instant ---
+  # NB: en R, `0 * NA` vaut `NA`, pas `0` (meme piege que dans .compute_aci_grid,
+  # cf. aci.R). Une seule multiplication matricielle globale `weights_norm %*%
+  # val_mat` ferait donc que le NA d'UNE SEULE station a l'instant t contamine
+  # TOUTES les cellules de la grille a cet instant t, y compris celles dont le
+  # poids sur cette station est nul (car trop eloignee). Pour chaque instant t,
+  # on neutralise donc les stations NA (poids mis a 0) puis on renormalise les
+  # poids restants sur les stations effectivement disponibles a cet instant.
+  n_cells    <- nrow(weights_norm)
+  interp_mat <- matrix(NA_real_, nrow = n_cells, ncol = nt)
+  for (t in seq_len(nt)) {
+    v_t    <- val_mat[, t]
+    na_st  <- is.na(v_t)
+    w_t    <- weights_norm
+    w_t[, na_st] <- 0
+    v_t[na_st]   <- 0
+
+    row_w  <- rowSums(w_t, na.rm = TRUE)
+    valid  <- !is.na(row_w) & row_w > 0
+    w_t[valid, ] <- w_t[valid, , drop = FALSE] / row_w[valid]
+
+    interp_mat[valid, t] <- w_t[valid, , drop = FALSE] %*% v_t
+  }
 
   # --- Reshape en array [nl x nw x nt] ---
   out <- array(NA_real_, c(nl, nw, nt))

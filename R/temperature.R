@@ -118,6 +118,32 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
   thresholds_day <- calculate_percentiles(dataset, percentile,
                                           reference_period, part_of_day)
 
+  .crossing_frequency(daily_ext, thresholds_day, above_thresholds,
+                      dataset$lon, dataset$lat)
+}
+
+#' Compute monthly threshold-crossing frequency from daily extrema
+#'
+#' Shared helper behind \code{calculate_halfday_component()} (base-R) and
+#' \code{calculate_halfday_component_terra()} (terra). Kept independent of
+#' how \code{daily_ext}/\code{thresholds_day} were produced, so both loading
+#' paths reuse the exact same, already-tested logic.
+#'
+#' @param daily_ext      List with \code{data} [lon x lat x days] and daily
+#'   \code{time}, as returned by \code{temp_extremum()}/\code{temp_extremum_terra()}
+#'   (converted to list form).
+#' @param thresholds_day Array \code{[lon x lat x 366]}, as returned by
+#'   \code{calculate_percentiles()}/\code{calculate_percentiles_terra()}
+#'   (converted to array form).
+#' @param above_thresholds Logical. \code{TRUE} counts days above the
+#'   threshold (hot extremes); \code{FALSE} counts days below (cold
+#'   extremes).
+#' @param lon,lat Coordinate vectors, carried through to the output.
+#' @return A list with \code{data} [lon x lat x months] and monthly
+#'   \code{time}.
+#' @keywords internal
+.crossing_frequency <- function(daily_ext, thresholds_day, above_thresholds,
+                                lon, lat) {
   day <- as.integer(format(as.Date(daily_ext$time), "%j"))
   dims <- dim(daily_ext$data)
   nl <- dims[1]; nw <- dims[2]; nt <- dims[3]
@@ -136,14 +162,13 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 
   # Monthly frequency (sum / count)
   crossing_dataset <- list(data = crossing, time = daily_ext$time,
-                           lon  = dataset$lon, lat = dataset$lat)
+                           lon  = lon, lat = lat)
   monthly_sum   <- resample_monthly(crossing_dataset, FUN = sum)
   monthly_count <- resample_monthly(crossing_dataset,
                                     FUN = function(x, na.rm) length(x))
 
   freq_data <- monthly_sum$data / monthly_count$data
-  list(data = freq_data, time = monthly_sum$time,
-       lon = dataset$lon, lat = dataset$lat)
+  list(data = freq_data, time = monthly_sum$time, lon = lon, lat = lat)
 }
 
 #' Calculate the full temperature component of the ACI

@@ -278,6 +278,25 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   out_full
 }
 
+#' Reorient a terra array to the package's [lon x lat x layer] convention
+#'
+#' \code{terra::as.array()} returns \code{[nrow x ncol x nlyr]} with rows
+#' (latitude) in decreasing order. The rest of the package expects
+#' \code{[lon x lat x layer]} with latitude increasing, matching
+#' \code{load_netcdf()}. Shared by \code{.spatraster_to_list()} and by
+#' \code{calculate_percentiles_terra()}'s day-of-year output (which has no
+#' real time dimension, so \code{.spatraster_to_list()} doesn't apply).
+#'
+#' @param r A \code{terra::SpatRaster}.
+#' @return A numeric array \code{[ncol x nrow x nlyr]} = \code{[lon x lat x layer]}.
+#' @keywords internal
+#' @importFrom terra as.array
+.spatraster_to_array_only <- function(r) {
+  arr <- terra::as.array(r)            # [nrow x ncol x nlyr], lat decroissante
+  arr <- aperm(arr, c(2, 1, 3))         # -> [ncol x nrow x nlyr] = [lon x lat x layer]
+  arr[, rev(seq_len(dim(arr)[2])), , drop = FALSE]   # lat en ordre croissant
+}
+
 #' Convert a (small) SpatRaster back to the package's plain-list format
 #'
 #' Once data has been reduced to daily (or coarser) resolution, it is small
@@ -292,17 +311,10 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 #'   \code{lon}, \code{lat}, \code{time} -- the same structure produced by
 #'   \code{load_netcdf()}.
 #' @export
-#' @importFrom terra as.array xFromCol yFromRow ncol nrow time
+#' @importFrom terra xFromCol yFromRow ncol nrow time
 .spatraster_to_list <- function(r) {
-  arr <- terra::as.array(r)          # [row x col x layer], attention a l'ordre
-  # terra::as.array renvoie [nrow x ncol x nlyr] (lignes = lat, decroissant),
-  # alors que le reste du package attend [lon x lat x time]. On transpose et
-  # on remet lat en ordre croissant pour rester coherent avec load_netcdf().
-  arr <- aperm(arr, c(2, 1, 3))       # -> [ncol x nrow x nlyr] = [lon x lat x time]
-  arr <- arr[, rev(seq_len(dim(arr)[2])), , drop = FALSE]
-
   list(
-    data = arr,
+    data = .spatraster_to_array_only(r),
     lon  = terra::xFromCol(r, seq_len(terra::ncol(r))),
     lat  = rev(terra::yFromRow(r, seq_len(terra::nrow(r)))),
     time = terra::time(r)

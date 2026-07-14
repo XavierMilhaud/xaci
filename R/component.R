@@ -85,7 +85,10 @@ resample_daily <- function(dataset, FUN = sum) {
                           na.rm = TRUE)
     }
   }
-  out[out == -Inf] <- NA
+  # is.infinite() attrape -Inf (ex. max() sur une journee entierement NA) ET
+  # +Inf (ex. min() sur une journee entierement NA) -- l'ancienne version ne
+  # convertissait que -Inf en NA, laissant filer un +Inf avec FUN = min.
+  out[is.infinite(out)] <- NA
   dataset$data <- out
   dataset$time <- as.POSIXct(days, tz = "UTC")
   dataset
@@ -121,7 +124,9 @@ resample_monthly <- function(dataset, FUN = mean) {
     out <- vapply(months, function(m) FUN(data[month_key == m], na.rm = TRUE),
                   numeric(1))
   }
-  out[out == -Inf] <- NA
+  # Voir la note equivalente dans resample_daily() : is.infinite() attrape
+  # -Inf ET +Inf, contrairement a l'ancien test == -Inf.
+  out[is.infinite(out)] <- NA
 
   list(
     data = out,

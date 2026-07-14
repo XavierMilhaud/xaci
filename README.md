@@ -177,7 +177,7 @@ the step you'll run repeatedly while exploring the data.
 # Monthly national ACI, no re-computation
 monthly_national_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
-  years = 2011:2015,
+  years               = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "month",
@@ -195,7 +195,7 @@ head(monthly_national_aci_FRA)
 # Same underlying data, different aggregation - no recomputation needed:
 seasonal_national_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
-  years = 2011:2015,
+  years               = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "season",
@@ -208,7 +208,7 @@ head(seasonal_national_aci_FRA)
 # By administrative unit (department, admin_level = 2) instead of national:
 dept_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
-  years = 2011:2015,
+  years               = 2011:2015,
   study_period        = c("2011-01-01", "2015-12-31"),
   reference_period    = c("2011-01-01", "2013-12-31"),
   granularity         = "month",
@@ -217,7 +217,9 @@ dept_aci_FRA <- calculate_aci(
   load_dir            = "results/FRA",
   computed_components = TRUE
 )
-dim(dept_aci_FRA)  # 96 departments over 7 variables (ACI and its 6 components) = 672 columns
+dim(dept_aci_FRA)  # 60 months, 96 departments over 7 variables (ACI and its 6 components) = 672 columns
+class(dept_aci_FRA)
+dept_aci_FRA[1:3, 1:10]
 
 # Full spatial grid, for mapping (area = FALSE, admin_level = NULL):
 grid_aci_FRA <- calculate_aci(
@@ -240,9 +242,19 @@ grid_aci_FRA <- calculate_aci(
 # dim(grid_aci_FRA$sealevel)
 # grid_aci_FRA$sealevel : only NA values, unexpected: some ERA5 cells are coastal!
 
+class(grid_aci_FRA)       # 60 months, 96 departments over 7 variables (ACI and its 6 components) = 672 columns
+attributes(grid_aci_FRA)
+class(grid_aci_FRA$lon)
+dim(grid_aci_FRA$lon)     # 63 grid cells on longitude
+dim(grid_aci_FRA$lat)     # 43 grid cells on latitude
+length(grid_aci_FRA$time) # studied months
+dim(grid_aci_FRA$ACI)     # ACI values for each month on each grid cell
+grid_aci_FRA$ACI[ , ,60]  # many NA values (coming from NA sea level component?)
+
+
 plot_aci_timeseries(monthly_national_aci_FRA, smooth = TRUE, span = 0.2)
 plot_aci_components(monthly_national_aci_FRA, type = "bar")
-plot_aci_map(grid_aci_FRA, variable = "ACI", time_index = "mean")
+plot_aci_map(grid_aci_FRA, variable = "ACI", time_index = "mean")  # strangely maps also a part of Spain, and other neighboors
 plot_aci_map(dept_aci_FRA, variable = "ACI", time_index = "mean")
 ```
 

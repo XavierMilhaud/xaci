@@ -34,7 +34,11 @@ calculate_maximum_precipitation_over_window <- function(dataset,
     out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2),
                         max, na.rm = TRUE)
   }
-  out[out == -Inf] <- NA
+  # Seul max() est utilise ici, donc seul -Inf pouvait apparaitre en
+  # pratique -- is.infinite() est garde par coherence avec resample_daily()/
+  # resample_monthly() (component.R), au cas ou cette fonction serait un
+  # jour generalisee a d'autres FUN (ex. min).
+  out[is.infinite(out)] <- NA
 
   period_dates <- as.POSIXct(paste0(periods, "-01"),
                              format = "%Y-%m-%d", tz = "UTC")

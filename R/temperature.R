@@ -179,6 +179,11 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #' @param temperature_data_path Path to the hourly \code{t2m} NetCDF file.
 #' @param country_abbrev        Three-letter ISO country code.
 #' @param reference_period      Character vector \code{c("start", "end")}.
+#'   Climatological baseline used for standardisation.
+#' @param study_period          Character vector \code{c("start", "end")}.
+#'   Full period covered by the study; used to name the cached grid-cell-level
+#'   \code{.rds} file (e.g. \code{"temperature_t90_1980_2020.rds"}), so that
+#'   distinct runs over different study windows don't collide or get mixed up.
 #' @param mask_path             Path to the country mask NetCDF file.
 #' @param percentile            Percentile for the threshold. Default \code{90}.
 #' @param extremum              \code{"max"} (hot) or \code{"min"} (cold).
@@ -198,6 +203,7 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 temperature_component <- function(temperature_data_path,
                                   country_abbrev,
                                   reference_period,
+                                  study_period,
                                   mask_path             = NULL,
                                   percentile            = 90,
                                   extremum              = "max",
@@ -211,12 +217,12 @@ temperature_component <- function(temperature_data_path,
                                   save_dir              = paste0("results/", country_abbrev),
                                   load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
-  label   <- paste0("temperature_t", as.integer(percentile))
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
+  label     <- paste0("temperature_t", as.integer(percentile))
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0(label, "_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0(label, "_", study_tag, ".rds"))
     if (!file.exists(path))
       stop("Cached file not found: ", path,
            "\nRun temperature_component() with save = TRUE first.")
@@ -241,7 +247,7 @@ temperature_component <- function(temperature_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(combined,
-              file.path(save_dir, paste0(label, "_", ref_tag, ".rds")))
+              file.path(save_dir, paste0(label, "_", study_tag, ".rds")))
     }
   }
 

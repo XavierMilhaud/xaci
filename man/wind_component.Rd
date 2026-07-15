@@ -9,6 +9,7 @@ wind_component(
   wind_v10_data_path,
   country_abbrev,
   reference_period,
+  study_period,
   mask_path = NULL,
   area = FALSE,
   admin_level = NULL,
@@ -27,7 +28,12 @@ wind_component(
 
 \item{country_abbrev}{Three-letter ISO country code.}
 
-\item{reference_period}{Character vector \code{c("start", "end")}.}
+\item{reference_period}{Character vector \code{c("start", "end")}.
+Climatological baseline used for standardisation.}
+
+\item{study_period}{Character vector \code{c("start", "end")}. Full
+period covered by the study; used to name the cached grid-cell-level
+\code{.rds} file (e.g. \code{"wind_1980_2020.rds"}).}
 
 \item{mask_path}{Path to the country mask NetCDF file, or
 \code{NULL}.}

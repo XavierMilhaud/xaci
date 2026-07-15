@@ -82,15 +82,17 @@ test_that("drought_component_terra concorde avec drought_component (admin_mask =
 
   reference_period <- c("2001-01-01", "2002-12-31")
 
-  res_base  <- drought_component(tmp_nc, "XX", reference_period, area = FALSE)
-  res_terra <- drought_component_terra(tmp_nc, "XX", reference_period, area = FALSE)
+  res_base  <- drought_component(tmp_nc, "XX", reference_period,
+                                 study_period = reference_period, area = FALSE)
+  res_terra <- drought_component_terra(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period, area = FALSE)
 
   expect_equal(dim(res_terra$data), dim(res_base$data))
   non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
   expect_true(any(non_na))
   expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
   expect_equal(as.character(as.Date(res_terra$time)),
-              as.character(as.Date(res_base$time)))
+               as.character(as.Date(res_base$time)))
 })
 
 test_that("drought_component_terra concorde avec drought_component (admin_mask fourni)", {
@@ -111,8 +113,10 @@ test_that("drought_component_terra concorde avec drought_component (admin_mask f
   reference_period <- c("2001-01-01", "2002-12-31")
 
   res_base  <- drought_component(tmp_nc, "XX", reference_period,
+                                 study_period = reference_period,
                                  admin_mask = admin_mask)
   res_terra <- drought_component_terra(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period,
                                        admin_mask = admin_mask)
 
   expect_s3_class(res_base, "data.frame")
@@ -125,7 +129,7 @@ test_that("drought_component_terra concorde avec drought_component (admin_mask f
     non_na <- !is.na(res_base[[col]]) & !is.na(res_terra[[col]])
     expect_true(any(non_na), info = col)
     expect_equal(res_terra[[col]][non_na], res_base[[col]][non_na],
-                tolerance = 1e-6, info = col)
+                 tolerance = 1e-6, info = col)
   }
 })
 
@@ -146,8 +150,10 @@ test_that("precipitation_component_terra concorde avec precipitation_component (
   reference_period <- c("2001-01-01", "2002-12-31")
 
   res_base  <- precipitation_component(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period,
                                        window_size = 5L, area = FALSE)
   res_terra <- precipitation_component_terra(tmp_nc, "XX", reference_period,
+                                             study_period = reference_period,
                                              window_size = 5L, area = FALSE)
 
   expect_equal(dim(res_terra$data), dim(res_base$data))
@@ -155,7 +161,7 @@ test_that("precipitation_component_terra concorde avec precipitation_component (
   expect_true(any(non_na))
   expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
   expect_equal(as.character(as.Date(res_terra$time)),
-              as.character(as.Date(res_base$time)))
+               as.character(as.Date(res_base$time)))
 })
 
 test_that("precipitation_component_terra concorde avec precipitation_component (admin_mask fourni)", {
@@ -176,8 +182,10 @@ test_that("precipitation_component_terra concorde avec precipitation_component (
   reference_period <- c("2001-01-01", "2002-12-31")
 
   res_base  <- precipitation_component(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period,
                                        window_size = 5L, admin_mask = admin_mask)
   res_terra <- precipitation_component_terra(tmp_nc, "XX", reference_period,
+                                             study_period = reference_period,
                                              window_size = 5L, admin_mask = admin_mask)
 
   expect_s3_class(res_base, "data.frame")
@@ -190,6 +198,6 @@ test_that("precipitation_component_terra concorde avec precipitation_component (
     non_na <- !is.na(res_base[[col]]) & !is.na(res_terra[[col]])
     expect_true(any(non_na), info = col)
     expect_equal(res_terra[[col]][non_na], res_base[[col]][non_na],
-                tolerance = 1e-6, info = col)
+                 tolerance = 1e-6, info = col)
   }
 })

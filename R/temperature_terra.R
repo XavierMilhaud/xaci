@@ -46,6 +46,7 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
 temperature_component_terra <- function(temperature_data_path,
                                         country_abbrev,
                                         reference_period,
+                                        study_period,
                                         mask_path             = NULL,
                                         percentile            = 90,
                                         extremum              = "max",
@@ -59,15 +60,15 @@ temperature_component_terra <- function(temperature_data_path,
                                         save_dir              = paste0("results/", country_abbrev),
                                         load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
-  label   <- paste0("temperature_t", as.integer(percentile))
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
+  label     <- paste0("temperature_t", as.integer(percentile))
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0(label, "_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0(label, "_", study_tag, ".rds"))
     if (!file.exists(path)) {
       stop("Cached file not found: ", path,
-          "\nRun temperature_component_terra() with save = TRUE first.")
+           "\nRun temperature_component_terra() with save = TRUE first.")
     }
     combined <- readRDS(path)
   } else {
@@ -75,11 +76,11 @@ temperature_component_terra <- function(temperature_data_path,
     r <- r - 273.15   # Kelvin -> Celsius ; reste paresseux (SpatRaster)
 
     day_comp   <- calculate_halfday_component_terra(r, reference_period, "day",
-                                                     extremum, percentile,
-                                                     above_thresholds)
+                                                    extremum, percentile,
+                                                    above_thresholds)
     night_comp <- calculate_halfday_component_terra(r, reference_period, "night",
-                                                     extremum, percentile,
-                                                     above_thresholds)
+                                                    extremum, percentile,
+                                                    above_thresholds)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,
@@ -90,7 +91,7 @@ temperature_component_terra <- function(temperature_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(combined,
-              file.path(save_dir, paste0(label, "_", ref_tag, ".rds")))
+              file.path(save_dir, paste0(label, "_", study_tag, ".rds")))
     }
   }
 

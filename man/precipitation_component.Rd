@@ -8,6 +8,7 @@ precipitation_component(
   precipitation_data_path,
   country_abbrev,
   reference_period,
+  study_period,
   mask_path = NULL,
   var_name = "tp",
   window_size = 5L,
@@ -27,6 +28,10 @@ precipitation_component(
 \item{country_abbrev}{Three-letter ISO country code.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{study_period}{Character vector \code{c("start", "end")}.
+Full period covered by the study; used to name the cached grid-cell-level
+\code{.rds} file (e.g. \code{"precipitation_1980_2020.rds"}).}
 
 \item{mask_path}{Path to the country mask NetCDF file, or
 \code{NULL}.}

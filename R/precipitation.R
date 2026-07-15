@@ -80,6 +80,9 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #' @param precipitation_data_path Path to the precipitation NetCDF file.
 #' @param country_abbrev          Three-letter ISO country code.
 #' @param reference_period        Character vector \code{c("start", "end")}.
+#' @param study_period            Character vector \code{c("start", "end")}.
+#'   Full period covered by the study; used to name the cached grid-cell-level
+#'   \code{.rds} file (e.g. \code{"precipitation_1980_2020.rds"}).
 #' @param mask_path               Path to the country mask NetCDF file, or
 #'   \code{NULL}.
 #' @param var_name                Variable name in the NetCDF. Default
@@ -100,6 +103,7 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 precipitation_component <- function(precipitation_data_path,
                                     country_abbrev,
                                     reference_period,
+                                    study_period,
                                     mask_path             = NULL,
                                     var_name              = "tp",
                                     window_size           = 5L,
@@ -112,11 +116,11 @@ precipitation_component <- function(precipitation_data_path,
                                     save_dir              = paste0("results/", country_abbrev),
                                     load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("precipitation_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("precipitation_", study_tag, ".rds"))
     if (!file.exists(path))
       stop("Cached file not found: ", path,
            "\nRun precipitation_component() with save = TRUE first.")
@@ -128,7 +132,7 @@ precipitation_component <- function(precipitation_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(period_max,
-              file.path(save_dir, paste0("precipitation_", ref_tag, ".rds")))
+              file.path(save_dir, paste0("precipitation_", study_tag, ".rds")))
     }
   }
 

@@ -74,9 +74,11 @@ test_that("temperature_component_terra concorde avec temperature_component (admi
   reference_period <- c("2001-01-01", "2001-12-31")
 
   res_base <- temperature_component(tmp_nc, "XX", reference_period,
+                                    study_period = reference_period,
                                     percentile = 90, extremum = "max",
                                     above_thresholds = TRUE, area = FALSE)
   res_terra <- temperature_component_terra(tmp_nc, "XX", reference_period,
+                                           study_period = reference_period,
                                            percentile = 90, extremum = "max",
                                            above_thresholds = TRUE, area = FALSE)
 
@@ -106,9 +108,11 @@ test_that("temperature_component_terra concorde avec temperature_component (admi
   reference_period <- c("2001-01-01", "2001-12-31")
 
   res_base  <- temperature_component(tmp_nc, "XX", reference_period,
+                                     study_period = reference_period,
                                      percentile = 90, extremum = "max",
                                      admin_mask = admin_mask)
   res_terra <- temperature_component_terra(tmp_nc, "XX", reference_period,
+                                           study_period = reference_period,
                                            percentile = 90, extremum = "max",
                                            admin_mask = admin_mask)
 

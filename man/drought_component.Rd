@@ -8,6 +8,7 @@ drought_component(
   precipitation_data_path,
   country_abbrev,
   reference_period,
+  study_period,
   mask_path = NULL,
   area = FALSE,
   admin_level = NULL,
@@ -28,6 +29,10 @@ and to construct the admin mask when \code{admin_level} is not
 \code{NULL}.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{study_period}{Character vector \code{c("start", "end")}.
+Full period covered by the study; used to name the cached grid-cell-level
+\code{.rds} file (e.g. \code{"drought_1980_2020.rds"}).}
 
 \item{mask_path}{Path to the country mask NetCDF file, or
 \code{NULL}.}

@@ -31,6 +31,7 @@ max_consecutive_dry_days_terra <- function(r) {
 drought_component_terra <- function(precipitation_data_path,
                                     country_abbrev,
                                     reference_period,
+                                    study_period,
                                     mask_path             = NULL,
                                     area                  = FALSE,
                                     admin_level           = NULL,
@@ -41,14 +42,14 @@ drought_component_terra <- function(precipitation_data_path,
                                     save_dir              = paste0("results/", country_abbrev),
                                     load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("drought_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("drought_", study_tag, ".rds"))
     if (!file.exists(path)) {
       stop("Cached file not found: ", path,
-          "\nRun drought_component_terra() with save = TRUE first.")
+           "\nRun drought_component_terra() with save = TRUE first.")
     }
     cdd_monthly <- readRDS(path)
   } else {
@@ -59,7 +60,7 @@ drought_component_terra <- function(precipitation_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(cdd_monthly,
-              file.path(save_dir, paste0("drought_", ref_tag, ".rds")))
+              file.path(save_dir, paste0("drought_", study_tag, ".rds")))
     }
   }
 

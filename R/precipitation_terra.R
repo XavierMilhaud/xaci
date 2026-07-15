@@ -17,8 +17,8 @@ NULL
 #' @return Same structure as \code{calculate_maximum_precipitation_over_window()}.
 #' @export
 calculate_maximum_precipitation_over_window_terra <- function(r,
-                                                               var_name    = "tp",
-                                                               window_size = 5L) {
+                                                              var_name    = "tp",
+                                                              window_size = 5L) {
   daily_r <- resample_daily_terra(r, fun = "sum")
   daily   <- .spatraster_to_list(daily_r)
   .max_precipitation_from_daily(daily, var_name, window_size)
@@ -34,6 +34,7 @@ calculate_maximum_precipitation_over_window_terra <- function(r,
 precipitation_component_terra <- function(precipitation_data_path,
                                           country_abbrev,
                                           reference_period,
+                                          study_period,
                                           mask_path             = NULL,
                                           var_name              = "tp",
                                           window_size           = 5L,
@@ -46,14 +47,14 @@ precipitation_component_terra <- function(precipitation_data_path,
                                           save_dir              = paste0("results/", country_abbrev),
                                           load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("precipitation_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("precipitation_", study_tag, ".rds"))
     if (!file.exists(path)) {
       stop("Cached file not found: ", path,
-          "\nRun precipitation_component_terra() with save = TRUE first.")
+           "\nRun precipitation_component_terra() with save = TRUE first.")
     }
     period_max <- readRDS(path)
   } else {
@@ -63,7 +64,7 @@ precipitation_component_terra <- function(precipitation_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(period_max,
-              file.path(save_dir, paste0("precipitation_", ref_tag, ".rds")))
+              file.path(save_dir, paste0("precipitation_", study_tag, ".rds")))
     }
   }
 

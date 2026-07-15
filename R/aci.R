@@ -417,6 +417,7 @@ calculate_aci <- function(country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,
       reference_period        = reference_period,
+      study_period            = study_period,
       area                    = is.null(admin_level) && area,
       admin_mask              = admin_mask,
       save                    = save,
@@ -430,6 +431,7 @@ calculate_aci <- function(country_abbrev,
       wind_v10_data_path = wind_v10_data_path,
       mask_path          = mask_data_path,
       reference_period   = reference_period,
+      study_period       = study_period,
       area               = is.null(admin_level) && area,
       admin_mask         = admin_mask,
       save               = save,
@@ -442,6 +444,7 @@ calculate_aci <- function(country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,
       reference_period        = reference_period,
+      study_period            = study_period,
       area                    = is.null(admin_level) && area,
       admin_mask              = admin_mask,
       save                    = save,
@@ -454,6 +457,7 @@ calculate_aci <- function(country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
       reference_period      = reference_period,
+      study_period          = study_period,
       percentile            = percentile_low,
       extremum              = "min",
       above_thresholds      = FALSE,
@@ -469,6 +473,7 @@ calculate_aci <- function(country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
       reference_period      = reference_period,
+      study_period          = study_period,
       percentile            = percentile_high,
       extremum              = "max",
       above_thresholds      = TRUE,
@@ -497,11 +502,11 @@ calculate_aci <- function(country_abbrev,
 
   } else {
 
-    ref_tag <- paste(substr(reference_period[1], 1, 4),
-                     substr(reference_period[2], 1, 4), sep = "_")
+    study_tag <- paste(substr(study_period[1], 1, 4),
+                       substr(study_period[2], 1, 4), sep = "_")
 
     .load_rds <- function(name) {
-      path <- file.path(load_dir, paste0(name, "_", ref_tag, ".rds"))
+      path <- file.path(load_dir, paste0(name, "_", study_tag, ".rds"))
       if (!file.exists(path))
         stop("Cached file not found: ", path,
              "\nRun calculate_aci() with save = TRUE first.")

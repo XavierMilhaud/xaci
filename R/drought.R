@@ -131,6 +131,9 @@ drought_interpolate <- function(cdd_annual) {
 #'   and to construct the admin mask when \code{admin_level} is not
 #'   \code{NULL}.
 #' @param reference_period        Character vector \code{c("start", "end")}.
+#' @param study_period             Character vector \code{c("start", "end")}.
+#'   Full period covered by the study; used to name the cached grid-cell-level
+#'   \code{.rds} file (e.g. \code{"drought_1980_2020.rds"}).
 #' @param mask_path               Path to the country mask NetCDF file, or
 #'   \code{NULL}.
 #' @param area                    Logical. If \code{TRUE} return national
@@ -156,6 +159,7 @@ drought_interpolate <- function(cdd_annual) {
 drought_component <- function(precipitation_data_path,
                               country_abbrev,
                               reference_period,
+                              study_period,
                               mask_path             = NULL,
                               area                  = FALSE,
                               admin_level           = NULL,
@@ -166,11 +170,11 @@ drought_component <- function(precipitation_data_path,
                               save_dir              = paste0("results/", country_abbrev),
                               load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("drought_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("drought_", study_tag, ".rds"))
     if (!file.exists(path))
       stop("Cached file not found: ", path,
            "\nRun drought_component() with save = TRUE first.")
@@ -183,7 +187,7 @@ drought_component <- function(precipitation_data_path,
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(cdd_monthly,
-              file.path(save_dir, paste0("drought_", ref_tag, ".rds")))
+              file.path(save_dir, paste0("drought_", study_tag, ".rds")))
     }
   }
 

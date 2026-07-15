@@ -508,11 +508,11 @@ sealevel_component <- function(country_abbrev,
                                save_dir            = paste0("results/", country_abbrev),
                                load_dir            = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("sealevel_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("sealevel_", study_tag, ".rds"))
     if (!file.exists(path))
       stop("Cached file not found: ", path,
            "\nRun sealevel_component() with save = TRUE first.")
@@ -527,7 +527,7 @@ sealevel_component <- function(country_abbrev,
 
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-      saveRDS(raw, file.path(save_dir, paste0("sealevel_", ref_tag, ".rds")))
+      saveRDS(raw, file.path(save_dir, paste0("sealevel_", study_tag, ".rds")))
     }
   }
 

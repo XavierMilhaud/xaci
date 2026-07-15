@@ -5,8 +5,8 @@
 \title{Terra-based Loading and Hourly-to-Daily Reduction}
 \description{
 Memory-safe alternatives to \code{load_netcdf()}/\code{apply_mask()}
-  and to the hourly-resolution steps of the temperature and wind pipelines
-  (\code{temp_extremum()}, \code{calculate_percentiles()}, the daily
+  and to the hourly-resolution steps of the temperature, precipitation and wind
+  pipelines (\code{temp_extremum()}, \code{calculate_percentiles()}, the daily
   resampling inside \code{wind_power()}).
 
   \strong{Why this file exists:} for a whole country at hourly resolution
@@ -16,10 +16,9 @@ Memory-safe alternatives to \code{load_netcdf()}/\code{apply_mask()}
   writing results to disk instead of accumulating them in memory.
 
   Only the hourly-scale steps are ported here. Once data has been reduced
-  to DAILY resolution (via \code{resample_daily_terra()} or
-  \code{temp_extremum_terra()}), the resulting object is small enough
-  (~40 years x 365 days) to convert back to a plain array with
-  \code{.spatraster_to_list()} and hand off, unchanged, to the rest of the
-  existing (already tested) pipeline -- \code{resample_monthly()},
+  to DAILY resolution (via \code{resample_daily_terra()}, \code{temp_extremum_terra()}, ...),
+  the resulting object is small enough (~40 years x 365 days) to convert back
+  to a plain array with \code{.spatraster_to_list()} and hand off, unchanged, to the
+  rest of the existing (already tested) pipeline -- \code{resample_monthly()},
   \code{standardize_metric()}, \code{.compute_aci_grid()}, etc.
 }

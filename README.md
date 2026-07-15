@@ -152,12 +152,12 @@ calculate_aci(
 )
 
 # Produces, in results/FRA/:
-#   temperature_t90_2011_2013.rds
-#   temperature_t10_2011_2013.rds
-#   precipitation_2011_2013.rds
-#   drought_2011_2013.rds
-#   wind_2011_2013.rds
-#   sealevel_2011_2013.rds
+#   temperature_t90_2011_2015.rds
+#   temperature_t10_2011_2015.rds
+#   precipitation_2011_2015.rds
+#   drought_2011_2015.rds
+#   wind_2011_2015.rds
+#   sealevel_2011_2015.rds
 ```
 
 Components can also be computed one at a time (e.g. to parallelise the work,
@@ -217,7 +217,7 @@ dept_aci_FRA <- calculate_aci(
   load_dir            = "results/FRA",
   computed_components = TRUE
 )
-dim(dept_aci_FRA)  # 60 months, 96 departments over 7 variables (ACI and its 6 components) = 672 columns
+dim(dept_aci_FRA)  # 60 months (5 years), 96 departments over 7 variables (ACI and its 6 components) = 672 columns
 class(dept_aci_FRA)
 dept_aci_FRA[1:3, 1:10]
 
@@ -250,7 +250,6 @@ dim(grid_aci_FRA$lat)     # 43 grid cells on latitude
 length(grid_aci_FRA$time) # studied months
 dim(grid_aci_FRA$ACI)     # ACI values for each month on each grid cell
 grid_aci_FRA$ACI[ , ,60]  # many NA values (coming from NA sea level component?)
-
 
 plot_aci_timeseries(monthly_national_aci_FRA, smooth = TRUE, span = 0.2)
 plot_aci_components(monthly_national_aci_FRA, type = "bar")

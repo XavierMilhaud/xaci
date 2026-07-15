@@ -47,21 +47,21 @@ test_that("wind_component_terra concorde avec wind_component (admin_mask = NULL)
                   as.POSIXct("2001-12-31 23:00", tz = "UTC"), by = "hour")
 
   .build_synthetic_wind_netcdf(tmp_u10, "u10", lon, lat, time_vec, origin,
-                              base_value = 3, seed = 11)
+                               base_value = 3, seed = 11)
   .build_synthetic_wind_netcdf(tmp_v10, "v10", lon, lat, time_vec, origin,
-                              base_value = 4, seed = 22)
+                               base_value = 4, seed = 22)
 
   reference_period <- c("2001-01-01", "2001-12-31")
 
   res_base  <- wind_component(tmp_u10, tmp_v10, "XX", reference_period,
-                              area = FALSE)
+                              study_period = reference_period, area = FALSE)
   res_terra <- wind_component_terra(tmp_u10, tmp_v10, "XX", reference_period,
-                                    area = FALSE)
+                                    study_period = reference_period, area = FALSE)
 
   expect_equal(dim(res_terra$data), dim(res_base$data))
   non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
   expect_true(any(non_na))
   expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
   expect_equal(as.character(as.Date(res_terra$time)),
-              as.character(as.Date(res_base$time)))
+               as.character(as.Date(res_base$time)))
 })

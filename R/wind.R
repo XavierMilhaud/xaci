@@ -176,6 +176,10 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
 #' @param wind_v10_data_path Path to the v10 NetCDF file.
 #' @param country_abbrev     Three-letter ISO country code.
 #' @param reference_period   Character vector \code{c("start", "end")}.
+#'   Climatological baseline used for standardisation.
+#' @param study_period       Character vector \code{c("start", "end")}. Full
+#'   period covered by the study; used to name the cached grid-cell-level
+#'   \code{.rds} file (e.g. \code{"wind_1980_2020.rds"}).
 #' @param mask_path          Path to the country mask NetCDF file, or
 #'   \code{NULL}.
 #' @param area               Logical. Default \code{FALSE}.
@@ -194,6 +198,7 @@ wind_component <- function(wind_u10_data_path,
                            wind_v10_data_path,
                            country_abbrev,
                            reference_period,
+                           study_period,
                            mask_path             = NULL,
                            area                  = FALSE,
                            admin_level           = NULL,
@@ -204,11 +209,11 @@ wind_component <- function(wind_u10_data_path,
                            save_dir              = paste0("results/", country_abbrev),
                            load_dir              = paste0("results/", country_abbrev)) {
 
-  ref_tag <- paste(substr(reference_period[1], 1, 4),
-                   substr(reference_period[2], 1, 4), sep = "_")
+  study_tag <- paste(substr(study_period[1], 1, 4),
+                     substr(study_period[2], 1, 4), sep = "_")
 
   if (computed_components) {
-    path <- file.path(load_dir, paste0("wind_", ref_tag, ".rds"))
+    path <- file.path(load_dir, paste0("wind_", study_tag, ".rds"))
     if (!file.exists(path))
       stop("Cached file not found: ", path,
            "\nRun wind_component() with save = TRUE first.")
@@ -220,7 +225,7 @@ wind_component <- function(wind_u10_data_path,
                                                        reference_period)
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-      saveRDS(freq, file.path(save_dir, paste0("wind_", ref_tag, ".rds")))
+      saveRDS(freq, file.path(save_dir, paste0("wind_", study_tag, ".rds")))
     }
   }
 

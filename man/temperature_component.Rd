@@ -8,6 +8,7 @@ temperature_component(
   temperature_data_path,
   country_abbrev,
   reference_period,
+  study_period,
   mask_path = NULL,
   percentile = 90,
   extremum = "max",
@@ -27,7 +28,13 @@ temperature_component(
 
 \item{country_abbrev}{Three-letter ISO country code.}
 
-\item{reference_period}{Character vector \code{c("start", "end")}.}
+\item{reference_period}{Character vector \code{c("start", "end")}.
+Climatological baseline used for standardisation.}
+
+\item{study_period}{Character vector \code{c("start", "end")}.
+Full period covered by the study; used to name the cached grid-cell-level
+\code{.rds} file (e.g. \code{"temperature_t90_1980_2020.rds"}), so that
+distinct runs over different study windows don't collide or get mixed up.}
 
 \item{mask_path}{Path to the country mask NetCDF file.}
 

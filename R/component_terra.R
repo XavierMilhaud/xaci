@@ -1,7 +1,7 @@
 #' @title Terra-based Loading and Hourly-to-Daily Reduction
 #' @description Memory-safe alternatives to \code{load_netcdf()}/\code{apply_mask()}
-#'   and to the hourly-resolution steps of the temperature and wind pipelines
-#'   (\code{temp_extremum()}, \code{calculate_percentiles()}, the daily
+#'   and to the hourly-resolution steps of the temperature, precipitation and wind
+#'   pipelines (\code{temp_extremum()}, \code{calculate_percentiles()}, the daily
 #'   resampling inside \code{wind_power()}).
 #'
 #'   \strong{Why this file exists:} for a whole country at hourly resolution
@@ -11,11 +11,10 @@
 #'   writing results to disk instead of accumulating them in memory.
 #'
 #'   Only the hourly-scale steps are ported here. Once data has been reduced
-#'   to DAILY resolution (via \code{resample_daily_terra()} or
-#'   \code{temp_extremum_terra()}), the resulting object is small enough
-#'   (~40 years x 365 days) to convert back to a plain array with
-#'   \code{.spatraster_to_list()} and hand off, unchanged, to the rest of the
-#'   existing (already tested) pipeline -- \code{resample_monthly()},
+#'   to DAILY resolution (via \code{resample_daily_terra()}, \code{temp_extremum_terra()}, ...),
+#'   the resulting object is small enough (~40 years x 365 days) to convert back
+#'   to a plain array with \code{.spatraster_to_list()} and hand off, unchanged, to the
+#'   rest of the existing (already tested) pipeline -- \code{resample_monthly()},
 #'   \code{standardize_metric()}, \code{.compute_aci_grid()}, etc.
 #' @name component_terra
 NULL
@@ -225,7 +224,7 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
                         type = "around", circular = FALSE)
 
   nt_ref <- terra::nlyr(rolled)
-  pad          <- rolled[[nt_ref]]
+  pad <- rolled[[nt_ref]]
   terra::values(pad) <- NA
   rolled <- c(rolled[[2:nt_ref]], pad)   # decalage de +1 pas (voir note ci-dessus)
 
@@ -252,8 +251,7 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 
   out <- terra::tapp(rolled, index = day_idx, fun = qfun, filename = "")
 
-  # CORRECTIF 3 (voir issue rapportee : lengths 366 vs 365) : quand un
-  # jour-de-l'annee (typiquement le 366e, sur des annees non bissextiles)
+  # CORRECTIF 3 : quand un jour-de-l'annee (typiquement le 366e, sur des annees non bissextiles)
   # n'apparait jamais dans la periode de reference, terra::tapp() ne produit
   # une couche QUE pour les groupes reellement presents -- contrairement a la
   # version base-R qui alloue toujours un tableau [.., 366] avec NA pour les

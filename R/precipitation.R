@@ -10,15 +10,41 @@ NULL
 #' takes the monthly maximum.
 #'
 #' @param dataset     List returned by \code{load_component()} for \code{tp}.
+#'                    May be sub-daily (e.g. hourly ERA5 data); it is always
+#'                    resampled to daily totals first.
 #' @param var_name    Variable name in \code{dataset}. Default \code{"tp"},
 #'                    inherited from ERA5 (variable name in the NetCDF).
-#' @param window_size Rolling window in days. Default \code{5}.
+#' @param window_size Rolling window in DAYS. Default \code{5}.
 #' @return A list with \code{data} [lon x lat x months] and \code{time}.
 #' @export
 calculate_maximum_precipitation_over_window <- function(dataset,
                                                         var_name    = "tp",
                                                         window_size = 5L) {
-  rolling <- calculate_rolling_sum(dataset, var_name, window_size)
+  # BUGFIX : window_size est documente comme un nombre de JOURS, mais
+  # calculate_rolling_sum() applique zoo::rollsum() directement sur la
+  # resolution native des donnees. Avec des donnees horaires (ex. ERA5),
+  # window_size = 5 roulait sur 5 HEURES au lieu de 5 jours. On resample
+  # donc explicitement en totaux journaliers d'abord (comme le fait deja
+  # max_consecutive_dry_days() dans drought.R), afin que window_size soit
+  # bien interprete en jours quelle que soit la resolution native du fichier.
+  daily <- resample_daily(dataset, FUN = sum)
+  .max_precipitation_from_daily(daily, var_name, window_size)
+}
+
+#' Compute monthly max rolling precipitation from an already-daily series
+#'
+#' Shared helper behind \code{calculate_maximum_precipitation_over_window()}
+#' (base-R) and its terra equivalent. Operates exclusively on DAILY-resolution
+#' precipitation totals (small, even for 40+ years of data).
+#'
+#' @param daily       List \code{list(data, time, lon, lat)}, daily
+#'   resolution (e.g. from \code{resample_daily(dataset, FUN = sum)}).
+#' @param var_name    Passed through to \code{calculate_rolling_sum()}.
+#' @param window_size Rolling window in days.
+#' @return A list with \code{data} [lon x lat x months] and \code{time}.
+#' @keywords internal
+.max_precipitation_from_daily <- function(daily, var_name, window_size) {
+  rolling <- calculate_rolling_sum(daily, var_name, window_size)
   data    <- rolling$data
   time    <- rolling$time
   dims    <- dim(data)
@@ -43,7 +69,7 @@ calculate_maximum_precipitation_over_window <- function(dataset,
   period_dates <- as.POSIXct(paste0(periods, "-01"),
                              format = "%Y-%m-%d", tz = "UTC")
 
-  list(data = out, time = period_dates, lon = dataset$lon, lat = dataset$lat)
+  list(data = out, time = period_dates, lon = daily$lon, lat = daily$lat)
 }
 
 #' Calculate the precipitation component of the ACI

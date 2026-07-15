@@ -9,15 +9,16 @@
 \arguments{
 \item{engine}{\code{"base"} (default, original ncdf4-based loading) or
 \code{"terra"} (memory-safe, for long/high-resolution historical
-series -- see \code{component_terra.R}). Only affects the temperature
-and wind components for now; \code{drought_component()},
-\code{precipitation_component()}, and \code{sealevel_component()} are
-not yet available in a terra-based form.}
+series -- see \code{component_terra.R}). Covers temperature, wind,
+drought, and precipitation; \code{sealevel_component()} is not yet
+available in a terra-based form (its primary input is tide-gauge CSV
+data, not gridded NetCDF, so the memory issue doesn't apply the same
+way -- see follow-up note).}
 }
 \value{
-A list with elements \code{temperature} and \code{wind}, each a
-  function with the same signature as \code{temperature_component()}/
-  \code{wind_component()}.
+A list with elements \code{temperature}, \code{wind},
+  \code{drought}, \code{precipitation}, each a function with the same
+  signature as its base-R counterpart.
 }
 \description{
 Isolates the \code{engine} dispatch logic used by \code{calculate_aci()}

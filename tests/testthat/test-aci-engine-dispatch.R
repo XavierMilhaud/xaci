@@ -15,16 +15,22 @@ test_that(".resolve_component_functions() choisit les bonnes fonctions selon eng
   base_fns <- .resolve_component_functions("base")
   expect_identical(base_fns$temperature, temperature_component)
   expect_identical(base_fns$wind, wind_component)
+  expect_identical(base_fns$drought, drought_component)
+  expect_identical(base_fns$precipitation, precipitation_component)
 
   terra_fns <- .resolve_component_functions("terra")
   expect_identical(terra_fns$temperature, temperature_component_terra)
   expect_identical(terra_fns$wind, wind_component_terra)
+  expect_identical(terra_fns$drought, drought_component_terra)
+  expect_identical(terra_fns$precipitation, precipitation_component_terra)
 })
 
 test_that(".resolve_component_functions() utilise 'base' par defaut", {
   default_fns <- .resolve_component_functions()
   expect_identical(default_fns$temperature, temperature_component)
   expect_identical(default_fns$wind, wind_component)
+  expect_identical(default_fns$drought, drought_component)
+  expect_identical(default_fns$precipitation, precipitation_component)
 })
 
 test_that(".resolve_component_functions() rejette un engine invalide", {

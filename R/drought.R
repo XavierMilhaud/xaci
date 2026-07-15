@@ -16,7 +16,21 @@ NULL
 #' @export
 max_consecutive_dry_days <- function(dataset) {
   # Resample to daily totals first (in case sub-daily data provided)
-  daily   <- resample_daily(dataset, FUN = sum)
+  daily <- resample_daily(dataset, FUN = sum)
+  .max_consecutive_dry_days_from_daily(daily)
+}
+
+#' Compute annual max consecutive dry days from an already-daily series
+#'
+#' Shared helper behind \code{max_consecutive_dry_days()} (base-R) and its
+#' terra equivalent. Operates exclusively on DAILY-resolution precipitation
+#' totals (small, even for 40+ years of data).
+#'
+#' @param daily List \code{list(data, time, lon, lat)}, daily resolution
+#'   (e.g. from \code{resample_daily(dataset, FUN = sum)}).
+#' @return A list with \code{data} [lon x lat x years] and annual \code{time}.
+#' @keywords internal
+.max_consecutive_dry_days_from_daily <- function(daily) {
   data    <- daily$data
   time    <- as.Date(daily$time)
   dims    <- dim(data)
@@ -56,7 +70,7 @@ max_consecutive_dry_days <- function(dataset) {
 
   annual_time <- as.POSIXct(paste0(years, "-12-31"), format = "%Y-%m-%d",
                             tz = "UTC")
-  list(data = out, time = annual_time, lon = dataset$lon, lat = dataset$lat)
+  list(data = out, time = annual_time, lon = daily$lon, lat = daily$lat)
 }
 
 #' Linearly interpolate annual CDD to monthly resolution

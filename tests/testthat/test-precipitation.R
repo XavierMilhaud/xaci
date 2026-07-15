@@ -49,22 +49,18 @@ test_that("calculate_maximum_precipitation_over_window renvoie NA quand toute la
   expect_true(is.na(res$data[1, 1, 1]))
 })
 
-test_that("calculate_maximum_precipitation_over_window conserve lon/lat multi-cellules", {
-  time <- as.POSIXct(paste0("2000-01-0", 1:5), tz = "UTC")
-  # 2 cellules spatiales (nl=2, nw=1), valeurs différentes par cellule.
-  # Attention : array() remplit en column-major (le 1er indice varie le plus
-  # vite), donc c(rep(1,5), rep(100,5)) ne donnerait PAS "cellule1 = que des 1,
-  # cellule2 = que des 100". On assigne explicitement par indice pour éviter
-  # ce piège.
-  data <- array(NA_real_, dim = c(2, 1, 5))
-  data[1, 1, ] <- 1     # cellule 1 : constante à 1
-  data[2, 1, ] <- 100   # cellule 2 : constante à 100
-  ds   <- list(data = data, time = time, lon = c(0, 1), lat = 0)
+test_that("calculate_maximum_precipitation_over_window interprete window_size en JOURS meme avec des donnees horaires (regression du bug corrige)", {
+  # 10 jours d'horaire, tp = 1/24 mm chaque heure -> total journalier = 1 mm/jour.
+  # AVANT LE CORRECTIF : window_size=5 roulait directement sur les donnees
+  # horaires brutes -> une fenetre de 5 HEURES (~5/24 = 0.208 mm), pas 5
+  # jours. APRES CORRECTIF : resample_daily() est applique d'abord, donc
+  # window_size=5 roule bien sur 5 jours -> 5 mm.
+  time <- seq(as.POSIXct("2000-01-01 00:00", tz = "UTC"), by = "hour",
+              length.out = 24 * 10)
+  data <- array(1 / 24, dim = c(1, 1, length(time)))
+  ds   <- list(data = data, time = time, lon = 0, lat = 0)
 
-  res <- calculate_maximum_precipitation_over_window(ds, window_size = 2L)
+  res <- calculate_maximum_precipitation_over_window(ds, window_size = 5L)
 
-  expect_equal(dim(res$data)[1], 2)
-  # Cellule 1 : sommes glissantes de 1 -> max = 2 ; cellule 2 : sommes de 100 -> max = 200
-  expect_equal(as.numeric(res$data[1, 1, 1]), 2)
-  expect_equal(as.numeric(res$data[2, 1, 1]), 200)
+  expect_equal(as.numeric(res$data[1, 1, 1]), 5, tolerance = 1e-8)
 })

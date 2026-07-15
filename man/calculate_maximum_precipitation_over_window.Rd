@@ -11,12 +11,14 @@ calculate_maximum_precipitation_over_window(
 )
 }
 \arguments{
-\item{dataset}{List returned by \code{load_component()} for \code{tp}.}
+\item{dataset}{List returned by \code{load_component()} for \code{tp}.
+May be sub-daily (e.g. hourly ERA5 data); it is always
+resampled to daily totals first.}
 
 \item{var_name}{Variable name in \code{dataset}. Default \code{"tp"},
 inherited from ERA5 (variable name in the NetCDF).}
 
-\item{window_size}{Rolling window in days. Default \code{5}.}
+\item{window_size}{Rolling window in DAYS. Default \code{5}.}
 }
 \value{
 A list with \code{data} [lon x lat x months] and \code{time}.

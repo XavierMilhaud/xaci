@@ -13,20 +13,27 @@ NULL
 #'
 #' @param engine \code{"base"} (default, original ncdf4-based loading) or
 #'   \code{"terra"} (memory-safe, for long/high-resolution historical
-#'   series -- see \code{component_terra.R}). Only affects the temperature
-#'   and wind components for now; \code{drought_component()},
-#'   \code{precipitation_component()}, and \code{sealevel_component()} are
-#'   not yet available in a terra-based form.
-#' @return A list with elements \code{temperature} and \code{wind}, each a
-#'   function with the same signature as \code{temperature_component()}/
-#'   \code{wind_component()}.
+#'   series -- see \code{component_terra.R}). Covers temperature, wind,
+#'   drought, and precipitation; \code{sealevel_component()} is not yet
+#'   available in a terra-based form (its primary input is tide-gauge CSV
+#'   data, not gridded NetCDF, so the memory issue doesn't apply the same
+#'   way -- see follow-up note).
+#' @return A list with elements \code{temperature}, \code{wind},
+#'   \code{drought}, \code{precipitation}, each a function with the same
+#'   signature as its base-R counterpart.
 #' @keywords internal
 .resolve_component_functions <- function(engine = c("base", "terra")) {
   engine <- match.arg(engine)
   if (engine == "terra") {
-    list(temperature = temperature_component_terra, wind = wind_component_terra)
+    list(temperature  = temperature_component_terra,
+         wind          = wind_component_terra,
+         drought       = drought_component_terra,
+         precipitation = precipitation_component_terra)
   } else {
-    list(temperature = temperature_component, wind = wind_component)
+    list(temperature  = temperature_component,
+         wind          = wind_component,
+         drought       = drought_component,
+         precipitation = precipitation_component)
   }
 }
 
@@ -306,17 +313,19 @@ calculate_aci <- function(country_abbrev,
                           computed_components     = FALSE,
                           engine                  = c("base", "terra")) {
 
-  # engine = "terra" : bascule temperature_component()/wind_component() vers
-  # leurs equivalents memory-safe (component_terra.R, temperature_terra.R,
-  # wind_terra.R), utiles pour de longs historiques haute-resolution (40+ ans
-  # horaire) qui saturent la RAM avec le chargement ncdf4 classique.
-  # drought_component()/precipitation_component()/sealevel_component() ne
-  # sont PAS encore concernees par ce parametre : leur besoin memoire n'a pas
-  # encore ete evalue (voir note de suivi).
-  engine          <- match.arg(engine)
-  component_fns   <- .resolve_component_functions(engine)
-  temperature_fun <- component_fns$temperature
-  wind_fun        <- component_fns$wind
+  # engine = "terra" : bascule temperature_component()/wind_component()/
+  # drought_component()/precipitation_component() vers leurs equivalents
+  # memory-safe (component_terra.R et fichiers *_terra.R associes), utiles
+  # pour de longs historiques haute-resolution (40+ ans horaire) qui
+  # saturent la RAM avec le chargement ncdf4 classique.
+  # sealevel_component() n'est PAS concernee par ce parametre (voir note de
+  # suivi dans .resolve_component_functions()).
+  engine            <- match.arg(engine)
+  component_fns     <- .resolve_component_functions(engine)
+  temperature_fun    <- component_fns$temperature
+  wind_fun           <- component_fns$wind
+  drought_fun        <- component_fns$drought
+  precipitation_fun  <- component_fns$precipitation
 
   # --- Column name helpers ---
   col_high <- sprintf("t%d", as.integer(percentile_high))
@@ -394,7 +403,7 @@ calculate_aci <- function(country_abbrev,
   if (!computed_components) {
 
     message("Computing drought component...")
-    comp_drought <- drought_component(
+    comp_drought <- drought_fun(
       country_abbrev = country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,
@@ -419,7 +428,7 @@ calculate_aci <- function(country_abbrev,
     )
 
     message("Computing precipitation component...")
-    comp_prec <- precipitation_component(
+    comp_prec <- precipitation_fun(
       country_abbrev = country_abbrev,
       precipitation_data_path = precipitation_data_path,
       mask_path               = mask_data_path,

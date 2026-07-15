@@ -200,6 +200,15 @@ NULL
 #' @param computed_components Logical. If \code{TRUE}, rds files storing results
 #'   of the computations of ACI components at grid cell level are reused.
 #'   Default \code{FALSE}.
+#' @param engine Character. \code{"base"} (default) uses the original
+#'   ncdf4-based loading for all components. \code{"terra"} switches
+#'   \code{temperature_component()}, \code{wind_component()},
+#'   \code{drought_component()}, and \code{precipitation_component()} to
+#'   their memory-safe terra-based equivalents (see
+#'   \code{.resolve_component_functions()}), recommended for long,
+#'   high-resolution historical series (40+ years hourly) that would
+#'   otherwise saturate RAM. \code{sealevel_component()} is unaffected by
+#'   this argument in either case.
 #' @return
 #'   \describe{
 #'     \item{National scalar (\code{area = TRUE}, \code{admin_level = NULL})}{

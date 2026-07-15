@@ -85,7 +85,8 @@ apply_mask_terra <- function(r, mask_path, threshold = 0.8) {
 #' full-resolution, grid-cell-level ("area = FALSE") workflows over long
 #' historical periods.
 #'
-#' @inheritParams load_netcdf_terra
+#' @param data_path Path to the NetCDF file.
+#' @param var_name  Name of the variable to extract.
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (default).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
 #' @return A \code{terra::SpatRaster}.

@@ -7,6 +7,8 @@
 load_component_terra(data_path, var_name, mask_path = NULL, threshold = 0.8)
 }
 \arguments{
+\item{data_path}{Path to the NetCDF file.}
+
 \item{var_name}{Name of the variable to extract.}
 
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (default).}

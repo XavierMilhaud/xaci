@@ -32,7 +32,7 @@ devtools::install(".")
 | `sf`             | Spatial operations (masks, admin polygons)    |
 | `rnaturalearth`  | Worldwide coastline layer (sea-level factors) |
 | `geodata`        | Multi-level administrative boundaries (GADM)  |
-| `terra`          | Required by `geodata`                         |
+| `terra`          | Required by `geodata`; also powers the memory-safe `engine = "terra"` option (see [Large historical periods](#large-historical-periods-the-terra-engine)) |
 | `units`          | Unit handling in spatial distance calculations|
 
 Suggested (not required for core use):
@@ -163,6 +163,12 @@ calculate_aci(
 Components can also be computed one at a time (e.g. to parallelise the work,
 or recompute a single component after a data update) — see
 [Computing individual components](#computing-individual-components) below.
+
+> **Working with 40+ years of hourly data for a whole country?** The default
+> loading (`ncdf4`-based) reads the full hourly cube into memory before any
+> computation, which can exceed available RAM at that scale. See
+> [Large historical periods: the `terra` engine](#large-historical-periods-the-terra-engine)
+> for a memory-safe, drop-in alternative.
 
 ### Step 4 · Deploy the computations at any granularity (fast, repeatable)
 
@@ -415,6 +421,90 @@ sealevel_component(
 
 ---
 
+## Large historical periods: the `terra` engine
+
+ERA5 data at hourly resolution, for a whole country, over several decades
+(e.g. 1980–2020), can be too large to load fully into memory with the
+default pipeline (`ncdf4`-based `load_component()`, used internally by
+`temperature_component()`, `wind_component()`, `drought_component()`, and
+`precipitation_component()`). Loading the raw hourly cube for a single
+variable can require tens of GB of RAM before any computation even starts.
+
+`xaci` provides a **memory-safe alternative** built on the
+[`terra`](https://rspatial.github.io/terra/) package: it reads NetCDF files
+lazily (metadata only, no pixel values loaded up front) and processes the
+hourly-to-daily reduction step block by block, writing intermediate results
+to disk rather than accumulating them in RAM. Once data has been reduced to
+daily resolution — a few hundred KB to a few MB even for 40+ years — the
+rest of the pipeline (percentile thresholds, monthly aggregation,
+standardisation) is identical to the default engine: same functions, same
+results, verified by a parity test suite (`tests/testthat/`) comparing both
+engines on synthetic and NetCDF-backed data.
+
+### Via `calculate_aci()`
+
+Pass `engine = "terra"` — everything else stays the same:
+
+```r
+calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("1980-01-01", "2020-12-31"),
+  reference_period    = c("1991-01-01", "2020-12-31"),
+  years               = 1980:2020,
+  granularity         = "month",
+  area                = TRUE,
+  factor              = 1 / 5,
+  admin_level         = NULL,
+  save                = TRUE,
+  save_dir            = "results/FRA",
+  computed_components = FALSE,
+  engine              = "terra"          # <- memory-safe loading & reduction
+)
+```
+
+`engine = "base"` (the default) reproduces the original behaviour exactly;
+switch to `engine = "terra"` when the default pipeline runs out of memory —
+typically a whole-country, hourly, multi-decade `study_period`.
+
+### Via individual components
+
+Each memory-safe component has a `_terra`-suffixed, drop-in equivalent, used
+exactly like its base-R counterpart (same arguments, same
+`save`/`computed_components` caching logic — see
+[Computing individual components](#computing-individual-components) above):
+
+| Base-R function               | Terra equivalent                   |
+|--------------------------------|--------------------------------------|
+| `temperature_component()`      | `temperature_component_terra()`      |
+| `wind_component()`             | `wind_component_terra()`             |
+| `drought_component()`          | `drought_component_terra()`          |
+| `precipitation_component()`    | `precipitation_component_terra()`    |
+
+```r
+temperature_component_terra(
+  country_abbrev        = "FRA",
+  temperature_data_path  = "data/era5/FRA/t2m_1980_2020.nc",
+  mask_path              = "data/era5/FRA/mask_FRA.nc",
+  reference_period       = c("1991-01-01", "2020-12-31"),
+  study_period           = c("1980-01-01", "2020-12-31"),
+  percentile = 90, extremum = "max", above_thresholds = TRUE,
+  area = FALSE, admin_level = NULL,
+  save = TRUE, save_dir = "results/FRA"
+)
+```
+
+> **Note:** `sealevel_component()` is unaffected by `engine` — its primary
+> input is tide-gauge CSV data (PSMSL), not gridded NetCDF, so the same
+> memory bottleneck doesn't apply.
+
+Cached `.rds` files are named identically whether produced by the base or
+terra engine (based on `study_period`, see
+[Step 3](#step-3--compute-components-at-grid-cell-level-long-one-off-per-period)),
+so a later call with `computed_components = TRUE` reloads them the same way
+regardless of which engine originally computed them.
+
+---
+
 ## Visualisation
 
 ```r
@@ -447,22 +537,28 @@ animate_aci_map(grid_aci_FRA, variable = "ACI")
 ```
 xaci/
 ├── R/
-│   ├── aci.R            # Main function calculate_aci()
-│   ├── component.R      # Base helpers (loading, mask, resampling)
-│   ├── temperature.R    # Temperature component (T10 / T90)
-│   ├── precipitation.R  # Precipitation component
-│   ├── drought.R        # Drought component (CDD)
-│   ├── wind.R           # Wind component
-│   ├── sealevel.R       # Sea-level component (PSMSL)
-│   ├── utils.R          # Shared utilities (standardisation, aggregation, masks...)
-│   ├── download.R       # ERA5 and mask download helpers
-│   └── visualization.R  # Plotting functions
+│   ├── aci.R                 # Main function calculate_aci() (engine = "base"/"terra")
+│   ├── component.R           # Base helpers (loading, mask, resampling)
+│   ├── component_terra.R     # Memory-safe loading & hourly->daily reduction (terra)
+│   ├── temperature.R         # Temperature component (T10 / T90)
+│   ├── temperature_terra.R   # Terra equivalent of temperature.R
+│   ├── precipitation.R       # Precipitation component
+│   ├── precipitation_terra.R # Terra equivalent of precipitation.R
+│   ├── drought.R             # Drought component (CDD)
+│   ├── drought_terra.R       # Terra equivalent of drought.R
+│   ├── wind.R                # Wind component
+│   ├── wind_terra.R          # Terra equivalent of wind.R
+│   ├── sealevel.R            # Sea-level component (PSMSL, not engine-dependent)
+│   ├── utils.R                # Shared utilities (standardisation, aggregation, masks...)
+│   ├── download.R            # ERA5 and mask download helpers
+│   └── visualization.R       # Plotting functions
 ├── inst/
 │   └── extdata/
 │       └── psmsl_data.csv   # PSMSL tide-gauge station metadata (bundled)
 ├── tests/
 │   └── testthat/
-│       └── test-aci.R
+│       ├── test-aci.R
+│       └── ...               # terra parity & NetCDF integration tests
 ├── DESCRIPTION
 ├── NAMESPACE
 └── LICENSE

@@ -26,7 +26,8 @@ calculate_aci(
   save = FALSE,
   save_dir = paste0("results/", country_abbrev),
   load_dir = paste0("results/", country_abbrev),
-  computed_components = FALSE
+  computed_components = FALSE,
+  engine = c("base", "terra")
 )
 }
 \arguments{

@@ -55,11 +55,29 @@ wind_power <- function(u10_dataset, v10_dataset, reference_period = NULL) {
 #' @export
 wind_thresholds <- function(u10_dataset, v10_dataset, reference_period) {
   wp_full <- wind_power(u10_dataset, v10_dataset)
+  .wind_thresholds_from_wp(wp_full, reference_period,
+                           u10_dataset$lon, u10_dataset$lat)
+}
+
+#' Compute per-day-of-year wind power thresholds from an already-daily series
+#'
+#' Shared helper behind \code{wind_thresholds()} (base-R) and the terra
+#' pipeline (\code{wind_power_terra()} + this same function). Operates
+#' exclusively on DAILY-resolution wind power (already small, even for
+#' 40+ years of data), never on raw hourly arrays.
+#'
+#' @param wp A list \code{list(data, time)}, daily resolution wind power
+#'   (e.g. from \code{wind_power()}, called without \code{reference_period}).
+#' @param reference_period Character vector \code{c("start", "end")}.
+#' @param lon,lat Coordinate vectors, carried through to the output.
+#' @return A list with \code{data} [lon x lat x all_days] and \code{time}.
+#' @keywords internal
+.wind_thresholds_from_wp <- function(wp, reference_period, lon, lat) {
   ref_start <- as.POSIXct(reference_period[1], tz = "UTC")
   ref_end   <- as.POSIXct(reference_period[2], tz = "UTC")
 
-  time     <- wp_full$time
-  data     <- wp_full$data
+  time     <- wp$time
+  data     <- wp$data
   ref_mask <- time >= ref_start & time <= ref_end
   dims     <- dim(data)
   nl <- dims[1]; nw <- dims[2]; nt <- dims[3]
@@ -82,7 +100,7 @@ wind_thresholds <- function(u10_dataset, v10_dataset, reference_period) {
       }
     }
   }
-  list(data = thresh, time = time, lon = u10_dataset$lon, lat = u10_dataset$lat)
+  list(data = thresh, time = time, lon = lon, lat = lat)
 }
 
 #' Calculate days with wind power above the 90th-percentile threshold
@@ -94,11 +112,19 @@ wind_thresholds <- function(u10_dataset, v10_dataset, reference_period) {
 #' @export
 days_above_wind_thresholds <- function(u10_dataset, v10_dataset,
                                        reference_period) {
-  wp   <- wind_power(u10_dataset, v10_dataset)
-  thr  <- wind_thresholds(u10_dataset, v10_dataset, reference_period)
+  wp  <- wind_power(u10_dataset, v10_dataset)
+  thr <- .wind_thresholds_from_wp(wp, reference_period,
+                                  u10_dataset$lon, u10_dataset$lat)
+  .days_above_from_wp(wp, thr, u10_dataset$lon, u10_dataset$lat)
+}
+
+#' Binary threshold-crossing from an already-daily wind power series
+#'
+#' Shared helper, see \code{.wind_thresholds_from_wp()}.
+#' @keywords internal
+.days_above_from_wp <- function(wp, thr, lon, lat) {
   above <- ifelse(wp$data > thr$data, 1L, 0L)
-  list(data = above, time = wp$time,
-       lon = u10_dataset$lon, lat = u10_dataset$lat)
+  list(data = above, time = wp$time, lon = lon, lat = lat)
 }
 
 #' Calculate monthly wind exceedance frequency
@@ -110,11 +136,21 @@ days_above_wind_thresholds <- function(u10_dataset, v10_dataset,
 #' @export
 calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
                                                        reference_period) {
-  above <- days_above_wind_thresholds(u10_dataset, v10_dataset, reference_period)
-  data  <- above$data
-  time  <- above$time
+  wp    <- wind_power(u10_dataset, v10_dataset)
+  thr   <- .wind_thresholds_from_wp(wp, reference_period,
+                                    u10_dataset$lon, u10_dataset$lat)
+  above <- .days_above_from_wp(wp, thr, u10_dataset$lon, u10_dataset$lat)
+  .monthly_frequency_from_binary(above, u10_dataset$lon, u10_dataset$lat)
+}
 
-  # Always aggregate at month level
+#' Monthly frequency of a binary daily series
+#'
+#' Shared helper, see \code{.wind_thresholds_from_wp()}.
+#' @keywords internal
+.monthly_frequency_from_binary <- function(bin, lon, lat) {
+  data <- bin$data
+  time <- bin$time
+
   key     <- format(time, "%Y-%m")
   periods <- unique(key)
   dims    <- dim(data)
@@ -131,8 +167,7 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
   period_dates <- as.POSIXct(paste0(periods, "-01"),
                              format = "%Y-%m-%d", tz = "UTC")
 
-  list(data = out, time = period_dates,
-       lon = u10_dataset$lon, lat = u10_dataset$lat)
+  list(data = out, time = period_dates, lon = lon, lat = lat)
 }
 
 #' Calculate the wind component of the ACI

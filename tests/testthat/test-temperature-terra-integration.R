@@ -1,52 +1,127 @@
 library(testthat)
 
 # ---------------------------------------------------------------------------
-# Parite calculate_halfday_component() vs calculate_halfday_component_terra()
+# Test d'integration bout-en-bout : temperature_component() (base-R) vs
+# temperature_component_terra(), sur un vrai petit fichier NetCDF synthetique
+# (pas seulement des objets en memoire comme les tests precedents).
 #
-# Les deux briques hourly-scale (temp_extremum/calculate_percentiles et leurs
-# equivalents terra) sont deja validees individuellement
-# (test-terra-daily-parity.R, test-percentiles-terra-parity.R). Ce test-ci
-# valide la "colle" : conversion SpatRaster -> liste/array
-# (.spatraster_to_list / .spatraster_to_array_only) et le partage du helper
-# .crossing_frequency() entre les deux chemins.
+# Deux scenarios :
+#   1. admin_mask = NULL (moyenne nationale) -- area = FALSE
+#   2. admin_mask fourni directement (2 regions synthetiques), pour tester
+#      reduce_dataarray_to_dataframe() sans dependre d'un telechargement
+#      GADM via build_admin_mask().
 # ---------------------------------------------------------------------------
 
-test_that("calculate_halfday_component_terra concorde avec calculate_halfday_component", {
+.build_synthetic_t2m_netcdf <- function(path, lon, lat, time_vec, origin) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+
+  set.seed(7)
+  nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+  saison <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))  # ~15C en Kelvin
+  vals <- array(NA_real_, dim = c(nlo, nla, nt))
+  for (i in seq_len(nlo)) {
+    for (j in seq_len(nla)) {
+      # Un petit decalage par cellule pour s'assurer que les regions/cellules
+      # ne sont pas toutes strictement identiques
+      vals[i, j, ] <- saison + (i + j) + rnorm(nt, sd = 1.5)
+    }
+  }
+
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def("time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+                               time_hours, unlim = TRUE)
+  var_t2m  <- ncdf4::ncvar_def("t2m", "K", list(dim_lon, dim_lat, dim_time),
+                               missval = NA, prec = "double")
+
+  nc <- ncdf4::nc_create(path, list(var_t2m))
+  ncdf4::ncvar_put(nc, var_t2m, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+.build_synthetic_admin_mask <- function(lon, lat) {
+  # 2x2 grille, 2 regions synthetiques ("A" = ligne de latitude 1,
+  # "B" = ligne de latitude 2), pondération 1/0 pour eviter tout calcul de
+  # fraction de surface -- on isole ici juste la mecanique de
+  # reduce_dataarray_to_dataframe(), pas build_admin_mask() (qui telecharge
+  # des shapefiles).
+  nw <- length(lat)
+  weights <- vector("list", length(lon) * nw)
+  for (i in seq_along(lon)) {
+    for (j in seq_along(lat)) {
+      idx <- (i - 1L) * nw + j
+      weights[[idx]] <- if (j == 1) c(A = 1, B = 0) else c(A = 0, B = 1)
+    }
+  }
+  list(units = c("A", "B"), lon = lon, lat = lat, weights = weights)
+}
+
+test_that("temperature_component_terra concorde avec temperature_component (admin_mask = NULL)", {
   skip_if_not_installed("terra")
 
-  set.seed(123)
-  # 2 ans d'horaire, grille 1x1 -- suffisant pour valider l'integration sans
-  # rendre le test trop lent.
+  tmp_nc <- tempfile(fileext = ".nc")
+  on.exit(unlink(tmp_nc), add = TRUE)
+
+  lon  <- c(0, 1)
+  lat  <- c(0, 1)
+  origin <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
   time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
-                  as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
-  n_t    <- length(time_vec)
-  saison <- 15 + 10 * sin(2 * pi * seq_along(time_vec) / (24 * 365))
-  vals   <- saison + rnorm(n_t, sd = 2)
+                  as.POSIXct("2001-12-31 23:00", tz = "UTC"), by = "hour")
 
-  ds <- list(data = array(vals, dim = c(1, 1, n_t)), time = time_vec,
-            lon = 0, lat = 0)
-  r  <- terra::rast(nrows = 1, ncols = 1, nlyrs = n_t, vals = vals)
-  terra::time(r) <- time_vec
+  .build_synthetic_t2m_netcdf(tmp_nc, lon, lat, time_vec, origin)
 
-  reference_period <- c("2001-01-01", "2002-12-31")
+  reference_period <- c("2001-01-01", "2001-12-31")
 
-  for (part_of_day in c("day", "night")) {
-    for (extremum in c("min", "max")) {
-      res_base <- calculate_halfday_component(ds, reference_period, part_of_day,
-                                               extremum, 90, TRUE)
-      res_terra <- calculate_halfday_component_terra(r, reference_period,
-                                                      part_of_day, extremum,
-                                                      90, TRUE)
+  res_base <- temperature_component(tmp_nc, "XX", reference_period,
+                                    percentile = 90, extremum = "max",
+                                    above_thresholds = TRUE, area = FALSE)
+  res_terra <- temperature_component_terra(tmp_nc, "XX", reference_period,
+                                           percentile = 90, extremum = "max",
+                                           above_thresholds = TRUE, area = FALSE)
 
-      label <- paste("part_of_day =", part_of_day, "/ extremum =", extremum)
-      expect_equal(dim(res_terra$data), dim(res_base$data), info = label)
+  expect_equal(dim(res_terra$data), dim(res_base$data))
+  non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
+  expect_true(any(non_na))
+  expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
+  expect_equal(as.character(as.Date(res_terra$time)),
+               as.character(as.Date(res_base$time)))
+})
 
-      non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
-      expect_true(any(non_na), info = label)
-      expect_equal(res_terra$data[non_na], res_base$data[non_na],
-                  tolerance = 1e-6, info = label)
-      expect_equal(as.character(as.Date(res_terra$time)),
-                  as.character(as.Date(res_base$time)), info = label)
-    }
+test_that("temperature_component_terra concorde avec temperature_component (admin_mask fourni)", {
+  skip_if_not_installed("terra")
+
+  tmp_nc <- tempfile(fileext = ".nc")
+  on.exit(unlink(tmp_nc), add = TRUE)
+
+  lon  <- c(0, 1)
+  lat  <- c(0, 1)
+  origin <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+  time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
+                  as.POSIXct("2001-12-31 23:00", tz = "UTC"), by = "hour")
+
+  .build_synthetic_t2m_netcdf(tmp_nc, lon, lat, time_vec, origin)
+  admin_mask <- .build_synthetic_admin_mask(lon, lat)
+
+  reference_period <- c("2001-01-01", "2001-12-31")
+
+  res_base  <- temperature_component(tmp_nc, "XX", reference_period,
+                                     percentile = 90, extremum = "max",
+                                     admin_mask = admin_mask)
+  res_terra <- temperature_component_terra(tmp_nc, "XX", reference_period,
+                                           percentile = 90, extremum = "max",
+                                           admin_mask = admin_mask)
+
+  expect_s3_class(res_base, "data.frame")
+  expect_s3_class(res_terra, "data.frame")
+  expect_equal(dim(res_terra), dim(res_base))
+  expect_equal(colnames(res_terra), colnames(res_base))
+  expect_equal(rownames(res_terra), rownames(res_base))
+
+  for (col in colnames(res_base)) {
+    non_na <- !is.na(res_base[[col]]) & !is.na(res_terra[[col]])
+    expect_true(any(non_na), info = col)
+    expect_equal(res_terra[[col]][non_na], res_base[[col]][non_na],
+                 tolerance = 1e-6, info = col)
   }
 })

@@ -5,6 +5,31 @@
 #' @name aci
 NULL
 
+#' Resolve which component functions to use based on the compute engine
+#'
+#' Isolates the \code{engine} dispatch logic used by \code{calculate_aci()}
+#' so it can be unit-tested directly (via \code{expect_identical()}) without
+#' needing to mock or run the full \code{calculate_aci()} pipeline.
+#'
+#' @param engine \code{"base"} (default, original ncdf4-based loading) or
+#'   \code{"terra"} (memory-safe, for long/high-resolution historical
+#'   series -- see \code{component_terra.R}). Only affects the temperature
+#'   and wind components for now; \code{drought_component()},
+#'   \code{precipitation_component()}, and \code{sealevel_component()} are
+#'   not yet available in a terra-based form.
+#' @return A list with elements \code{temperature} and \code{wind}, each a
+#'   function with the same signature as \code{temperature_component()}/
+#'   \code{wind_component()}.
+#' @keywords internal
+.resolve_component_functions <- function(engine = c("base", "terra")) {
+  engine <- match.arg(engine)
+  if (engine == "terra") {
+    list(temperature = temperature_component_terra, wind = wind_component_terra)
+  } else {
+    list(temperature = temperature_component, wind = wind_component)
+  }
+}
+
 #' Compute the ACI at grid-cell level
 #'
 #' All component inputs must be lists with a \code{data} array
@@ -278,7 +303,20 @@ calculate_aci <- function(country_abbrev,
                           save                    = FALSE,
                           save_dir                = paste0("results/", country_abbrev),
                           load_dir                = paste0("results/", country_abbrev),
-                          computed_components     = FALSE) {
+                          computed_components     = FALSE,
+                          engine                  = c("base", "terra")) {
+
+  # engine = "terra" : bascule temperature_component()/wind_component() vers
+  # leurs equivalents memory-safe (component_terra.R, temperature_terra.R,
+  # wind_terra.R), utiles pour de longs historiques haute-resolution (40+ ans
+  # horaire) qui saturent la RAM avec le chargement ncdf4 classique.
+  # drought_component()/precipitation_component()/sealevel_component() ne
+  # sont PAS encore concernees par ce parametre : leur besoin memoire n'a pas
+  # encore ete evalue (voir note de suivi).
+  engine          <- match.arg(engine)
+  component_fns   <- .resolve_component_functions(engine)
+  temperature_fun <- component_fns$temperature
+  wind_fun        <- component_fns$wind
 
   # --- Column name helpers ---
   col_high <- sprintf("t%d", as.integer(percentile_high))
@@ -321,7 +359,12 @@ calculate_aci <- function(country_abbrev,
       admin_assignment <- readRDS(assignment_path_rds)
     } else {
       message("Building administrative mask (this may take a moment)...")
-      tmp_dataset <- load_component(temperature_data_path, "t2m", mask_data_path)
+      if (engine == "terra") {
+        tmp_r       <- load_component_terra(temperature_data_path, "t2m", mask_data_path)
+        tmp_dataset <- .spatraster_to_list(tmp_r[[1]])   # 1 seule couche suffit pour lon/lat
+      } else {
+        tmp_dataset <- load_component(temperature_data_path, "t2m", mask_data_path)
+      }
       admin_mask  <- build_admin_mask(
         lon            = tmp_dataset$lon,
         lat            = tmp_dataset$lat,
@@ -363,7 +406,7 @@ calculate_aci <- function(country_abbrev,
     )
 
     message("Computing wind component...")
-    comp_wind <- wind_component(
+    comp_wind <- wind_fun(
       country_abbrev = country_abbrev,
       wind_u10_data_path = wind_u10_data_path,
       wind_v10_data_path = wind_v10_data_path,
@@ -388,7 +431,7 @@ calculate_aci <- function(country_abbrev,
     )
 
     message(sprintf("Computing temperature T%d component...", percentile_low))
-    comp_t_low <- temperature_component(
+    comp_t_low <- temperature_fun(
       country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
@@ -403,7 +446,7 @@ calculate_aci <- function(country_abbrev,
     )
 
     message(sprintf("Computing temperature T%d component...", percentile_high))
-    comp_t_high <- temperature_component(
+    comp_t_high <- temperature_fun(
       country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,

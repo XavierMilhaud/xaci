@@ -63,19 +63,66 @@ load_netcdf_terra <- function(path, var_name) {
 #' Equivalent of \code{apply_mask()}: sets cells to \code{NA} where the mask
 #' value is below \code{threshold}. Processed block-by-block by terra.
 #'
-#' @param r         A \code{terra::SpatRaster} (e.g. from \code{load_netcdf_terra()}).
-#' @param mask_path Path to the mask NetCDF file (variable: \code{country}).
-#' @param threshold Numeric threshold. Default \code{0.8}.
+#' \strong{Note sur la limite de 65535 couches :} le format interne utilise
+#' par \code{terra::mask()} pour ecrire son resultat sur disque (fichier
+#' temporaire) ne supporte pas plus de 65535 couches en sortie. Au-dela (cas
+#' frequent en donnees horaires sur plusieurs decennies : ~300k couches pour
+#' 35 ans), on ne peut pas masquer l'objet en un seul appel. Cette fonction
+#' bascule donc automatiquement sur un traitement par blocs temporels
+#' (`chunk_size` couches a la fois), ecrits en GeoTIFF (BigTIFF) puis
+#' recombines en une seule source multi-fichiers, sans jamais materialiser
+#' l'ensemble en RAM. Le masque etant purement spatial (identique a chaque
+#' pas de temps), le decoupage en blocs ne change pas le resultat : un pixel
+#' exclu par le masque l'est de la meme facon dans chaque bloc.
+#'
+#' @param r          A \code{terra::SpatRaster} (e.g. from \code{load_netcdf_terra()}).
+#' @param mask_path  Path to the mask NetCDF file (variable: \code{country}).
+#' @param threshold  Numeric threshold. Default \code{0.8}.
+#' @param chunk_size Nombre max de couches traitees par bloc quand
+#'   \code{nlyr(r)} depasse 65535. Default \code{20000} (marge confortable
+#'   sous la limite, ajustable selon la RAM/disque disponibles).
 #' @return The masked \code{terra::SpatRaster}.
 #' @export
-#' @importFrom terra rast compareGeom resample mask
-apply_mask_terra <- function(r, mask_path, threshold = 0.8) {
+#' @importFrom terra rast compareGeom resample mask nlyr time writeRaster
+apply_mask_terra <- function(r, mask_path, threshold = 0.8, chunk_size = 20000) {
   mask_r <- terra::rast(mask_path, subds = "country")
   if (!isTRUE(terra::compareGeom(r, mask_r, stopOnError = FALSE))) {
     mask_r <- terra::resample(mask_r, r[[1]], method = "near")
   }
   keep <- mask_r >= threshold
-  terra::mask(r, keep, maskvalue = FALSE)
+
+  n <- terra::nlyr(r)
+  if (n <= 65535L) {
+    return(terra::mask(r, keep, maskvalue = FALSE))
+  }
+
+  warning(
+    "[apply_mask_terra] ", n, " couches (> 65535) : masquage par blocs de ",
+    chunk_size, " couches (voir ?apply_mask_terra). Envisagez de masquer ",
+    "apres reduction temporelle (resample_daily_terra()/tapp()) pour ",
+    "eviter ce contournement, plus lent.",
+    call. = FALSE
+  )
+
+  time_r  <- terra::time(r)
+  starts  <- seq(1L, n, by = chunk_size)
+  tmp_dir <- tempfile("mask_chunks_")
+  dir.create(tmp_dir)
+  tmp_files <- character(length(starts))
+
+  for (i in seq_along(starts)) {
+    idx <- starts[i]:min(starts[i] + chunk_size - 1L, n)
+    tmp_files[i] <- file.path(tmp_dir, sprintf("chunk_%04d.tif", i))
+    terra::mask(
+      r[[idx]], keep, maskvalue = FALSE,
+      filename = tmp_files[i], overwrite = TRUE,
+      filetype = "GTiff", gdal = c("BIGTIFF=YES")
+    )
+  }
+
+  out <- terra::rast(tmp_files)
+  terra::time(out) <- time_r
+  out
 }
 
 #' Load a NetCDF variable and optionally apply a country mask (terra version)
@@ -86,14 +133,18 @@ apply_mask_terra <- function(r, mask_path, threshold = 0.8) {
 #'
 #' @param data_path Path to the NetCDF file.
 #' @param var_name  Name of the variable to extract.
-#' @param mask_path Path to the mask NetCDF file, or \code{NULL} (default).
-#' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param mask_path  Path to the mask NetCDF file, or \code{NULL} (default).
+#' @param threshold  Numeric threshold for the mask. Default \code{0.8}.
+#' @param chunk_size Passe a \code{apply_mask_terra()} (voir sa doc) pour le
+#'   cas ou \code{nlyr(r)} depasse la limite de 65535 couches.
 #' @return A \code{terra::SpatRaster}.
 #' @export
 load_component_terra <- function(data_path, var_name, mask_path = NULL,
-                                 threshold = 0.8) {
+                                 threshold = 0.8, chunk_size = 20000) {
   r <- load_netcdf_terra(data_path, var_name)
-  if (!is.null(mask_path)) r <- apply_mask_terra(r, mask_path, threshold)
+  if (!is.null(mask_path)) {
+    r <- apply_mask_terra(r, mask_path, threshold, chunk_size = chunk_size)
+  }
   r
 }
 

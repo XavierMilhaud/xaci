@@ -4,7 +4,7 @@
 \alias{apply_mask_terra}
 \title{Apply a country mask to a SpatRaster}
 \usage{
-apply_mask_terra(r, mask_path, threshold = 0.8)
+apply_mask_terra(r, mask_path, threshold = 0.8, chunk_size = 20000)
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster} (e.g. from \code{load_netcdf_terra()}).}
@@ -12,6 +12,10 @@ apply_mask_terra(r, mask_path, threshold = 0.8)
 \item{mask_path}{Path to the mask NetCDF file (variable: \code{country}).}
 
 \item{threshold}{Numeric threshold. Default \code{0.8}.}
+
+\item{chunk_size}{Nombre max de couches traitees par bloc quand
+\code{nlyr(r)} depasse 65535. Default \code{20000} (marge confortable
+sous la limite, ajustable selon la RAM/disque disponibles).}
 }
 \value{
 The masked \code{terra::SpatRaster}.
@@ -19,4 +23,17 @@ The masked \code{terra::SpatRaster}.
 \description{
 Equivalent of \code{apply_mask()}: sets cells to \code{NA} where the mask
 value is below \code{threshold}. Processed block-by-block by terra.
+}
+\details{
+\strong{Note sur la limite de 65535 couches :} le format interne utilise
+par \code{terra::mask()} pour ecrire son resultat sur disque (fichier
+temporaire) ne supporte pas plus de 65535 couches en sortie. Au-dela (cas
+frequent en donnees horaires sur plusieurs decennies : ~300k couches pour
+35 ans), on ne peut pas masquer l'objet en un seul appel. Cette fonction
+bascule donc automatiquement sur un traitement par blocs temporels
+(`chunk_size` couches a la fois), ecrits en GeoTIFF (BigTIFF) puis
+recombines en une seule source multi-fichiers, sans jamais materialiser
+l'ensemble en RAM. Le masque etant purement spatial (identique a chaque
+pas de temps), le decoupage en blocs ne change pas le resultat : un pixel
+exclu par le masque l'est de la meme facon dans chaque bloc.
 }

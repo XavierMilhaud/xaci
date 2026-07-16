@@ -11,13 +11,28 @@ NULL
 
 #' Calculate maximum consecutive dry days (terra version)
 #'
-#' @param r A \code{terra::SpatRaster}, hourly (or sub-daily) resolution
-#'   precipitation, with \code{terra::time()} set.
+#' @param r         A \code{terra::SpatRaster}, hourly (or sub-daily)
+#'   resolution precipitation, with \code{terra::time()} set. \strong{Non
+#'   masque} : le masquage se fait ici, une fois les donnees reduites a la
+#'   resolution journaliere (voir note ci-dessous).
+#' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
+#' @param threshold Numeric threshold for the mask. Default \code{0.8}.
 #' @return Same structure as \code{max_consecutive_dry_days()}.
 #' @export
-max_consecutive_dry_days_terra <- function(r) {
+max_consecutive_dry_days_terra <- function(r, mask_path = NULL, threshold = 0.8) {
   daily_r <- resample_daily_terra(r, fun = "sum")
-  daily   <- .spatraster_to_list(daily_r)
+
+  # Masquage APRES reduction horaire -> journaliere (et non avant, sur les
+  # donnees brutes) : le masque est purement spatial, identique a chaque pas
+  # de temps, donc l'ordre ne change pas le resultat -- mais masquer ~12800
+  # couches journalieres (35 ans) plutot que ~300000 couches horaires reste
+  # sous la limite de 65535 couches de terra::mask() et evite le traitement
+  # par blocs (bien plus lent) de apply_mask_terra().
+  if (!is.null(mask_path)) {
+    daily_r <- apply_mask_terra(daily_r, mask_path, threshold)
+  }
+
+  daily <- .spatraster_to_list(daily_r)
   .max_consecutive_dry_days_from_daily(daily)
 }
 
@@ -53,8 +68,8 @@ drought_component_terra <- function(precipitation_data_path,
     }
     cdd_monthly <- readRDS(path)
   } else {
-    r          <- load_component_terra(precipitation_data_path, "tp", mask_path)
-    cdd_annual <- max_consecutive_dry_days_terra(r)
+    r          <- load_netcdf_terra(precipitation_data_path, "tp")
+    cdd_annual <- max_consecutive_dry_days_terra(r, mask_path)
     cdd_monthly <- drought_interpolate(cdd_annual)
 
     if (save) {
@@ -65,8 +80,12 @@ drought_component_terra <- function(precipitation_data_path,
   }
 
   # Resolution du masque admin : une SEULE couche suffit pour lon/lat.
+  # load_netcdf_terra() est lazy (metadonnees seulement) et NON masque : le
+  # masquage ne change ni les dimensions ni les coordonnees, donc inutile ici
+  # -- eviter de recharger + remasquer l'integralite du fichier horaire brut
+  # juste pour ca.
   if (is.null(admin_mask) && !is.null(admin_level)) {
-    tmp      <- load_component_terra(precipitation_data_path, "tp", mask_path)
+    tmp      <- load_netcdf_terra(precipitation_data_path, "tp")
     tmp_list <- .spatraster_to_list(tmp[[1]])
     admin_mask <- build_admin_mask(tmp_list$lon, tmp_list$lat, country_abbrev,
                                    admin_level, crs_metric)

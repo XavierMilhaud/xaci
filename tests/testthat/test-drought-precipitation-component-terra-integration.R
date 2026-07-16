@@ -66,6 +66,22 @@ library(testthat)
   list(units = c("A", "B"), lon = lon, lat = lat, weights = weights)
 }
 
+.build_synthetic_country_mask_netcdf <- function(path, lon, lat, keep_matrix) {
+  # keep_matrix : matrice [length(lon) x length(lat)], TRUE = cellule gardee
+  # (a l'interieur du pays), FALSE = cellule masquee (mise a NA). Meme
+  # convention que apply_mask_terra() : variable "country", valeurs
+  # continues comparees a un seuil (0.8 par defaut) -- on utilise ici
+  # simplement 1/0 pour ne pas ambigüiser le seuil.
+  dim_lon <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  var_country <- ncdf4::ncvar_def("country", "1", list(dim_lon, dim_lat),
+                                  missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_country))
+  ncdf4::ncvar_put(nc, var_country, matrix(as.numeric(keep_matrix), nrow = length(lon)))
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
 test_that("drought_component_terra concorde avec drought_component (admin_mask = NULL)", {
   skip_if_not_installed("terra")
 
@@ -131,6 +147,58 @@ test_that("drought_component_terra concorde avec drought_component (admin_mask f
     expect_equal(res_terra[[col]][non_na], res_base[[col]][non_na],
                  tolerance = 1e-6, info = col)
   }
+})
+
+test_that("drought_component_terra concorde avec drought_component (mask_path fourni)", {
+  skip_if_not_installed("terra")
+
+  # Ce test couvre precisement le refactor issue du bug des 65535 couches :
+  # drought_component_terra() masque desormais APRES reduction journaliere
+  # (component_terra.R / drought_terra.R), et non plus sur les donnees
+  # horaires brutes. On verifie ici que le resultat final reste identique a
+  # la version base-R, ce qui valide a la fois la correction du masquage et
+  # la propriete d'invariance d'ordre masquage/agregation qui la justifie.
+  tmp_nc   <- tempfile(fileext = ".nc")
+  tmp_mask <- tempfile(fileext = ".nc")
+  on.exit(unlink(c(tmp_nc, tmp_mask)), add = TRUE)
+
+  lon <- c(0, 1)
+  lat <- c(0, 1)
+  origin <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+  time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
+                  as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
+
+  .build_synthetic_tp_netcdf(tmp_nc, lon, lat, time_vec, origin, seed = 51)
+
+  # On masque une cellule sur quatre (garde 3, exclut la cellule lon[2]/lat[2])
+  keep_matrix <- matrix(c(TRUE, TRUE, TRUE, FALSE), nrow = 2)
+  .build_synthetic_country_mask_netcdf(tmp_mask, lon, lat, keep_matrix)
+
+  reference_period <- c("2001-01-01", "2002-12-31")
+
+  res_base  <- drought_component(tmp_nc, "XX", reference_period,
+                                 study_period = reference_period,
+                                 mask_path = tmp_mask, area = FALSE)
+  res_terra <- drought_component_terra(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period,
+                                       mask_path = tmp_mask, area = FALSE)
+
+  expect_equal(dim(res_terra$data), dim(res_base$data))
+
+  # Plutot que de supposer une cellule precise (l'orientation exacte
+  # lon/lat dans le NetCDF depend de load_netcdf()/ncvar_get(), qu'on ne
+  # veut pas re-deviner ici), on verifie que les DEUX versions masquent
+  # exactement une seule et meme cellule -- c'est la propriete qui compte
+  # reellement (coherence base-R / terra), independamment de toute
+  # convention d'indexation.
+  masked_base  <- which(apply(is.na(res_base$data),  c(1, 2), all), arr.ind = TRUE)
+  masked_terra <- which(apply(is.na(res_terra$data), c(1, 2), all), arr.ind = TRUE)
+  expect_equal(nrow(masked_base), 1L)
+  expect_equal(unname(masked_base), unname(masked_terra))
+
+  non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
+  expect_true(any(non_na))
+  expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
 })
 
 test_that("precipitation_component_terra concorde avec precipitation_component (admin_mask = NULL)", {
@@ -200,4 +268,45 @@ test_that("precipitation_component_terra concorde avec precipitation_component (
     expect_equal(res_terra[[col]][non_na], res_base[[col]][non_na],
                  tolerance = 1e-6, info = col)
   }
+})
+
+test_that("precipitation_component_terra concorde avec precipitation_component (mask_path fourni)", {
+  skip_if_not_installed("terra")
+
+  tmp_nc   <- tempfile(fileext = ".nc")
+  tmp_mask <- tempfile(fileext = ".nc")
+  on.exit(unlink(c(tmp_nc, tmp_mask)), add = TRUE)
+
+  lon <- c(0, 1)
+  lat <- c(0, 1)
+  origin <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+  time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
+                  as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
+
+  .build_synthetic_tp_netcdf(tmp_nc, lon, lat, time_vec, origin, seed = 52)
+
+  keep_matrix <- matrix(c(TRUE, TRUE, TRUE, FALSE), nrow = 2)
+  .build_synthetic_country_mask_netcdf(tmp_mask, lon, lat, keep_matrix)
+
+  reference_period <- c("2001-01-01", "2002-12-31")
+
+  res_base  <- precipitation_component(tmp_nc, "XX", reference_period,
+                                       study_period = reference_period,
+                                       window_size = 5L,
+                                       mask_path = tmp_mask, area = FALSE)
+  res_terra <- precipitation_component_terra(tmp_nc, "XX", reference_period,
+                                             study_period = reference_period,
+                                             window_size = 5L,
+                                             mask_path = tmp_mask, area = FALSE)
+
+  expect_equal(dim(res_terra$data), dim(res_base$data))
+
+  masked_base  <- which(apply(is.na(res_base$data),  c(1, 2), all), arr.ind = TRUE)
+  masked_terra <- which(apply(is.na(res_terra$data), c(1, 2), all), arr.ind = TRUE)
+  expect_equal(nrow(masked_base), 1L)
+  expect_equal(unname(masked_base), unname(masked_terra))
+
+  non_na <- !is.na(res_base$data) & !is.na(res_terra$data)
+  expect_true(any(non_na))
+  expect_equal(res_terra$data[non_na], res_base$data[non_na], tolerance = 1e-6)
 })

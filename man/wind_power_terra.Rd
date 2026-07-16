@@ -4,14 +4,26 @@
 \alias{wind_power_terra}
 \title{Calculate daily wind power from u10 and v10 components (terra version)}
 \usage{
-wind_power_terra(u10_r, v10_r, reference_period = NULL)
+wind_power_terra(
+  u10_r,
+  v10_r,
+  reference_period = NULL,
+  mask_path = NULL,
+  threshold = 0.8
+)
 }
 \arguments{
-\item{u10_r, v10_r}{\code{terra::SpatRaster}, hourly resolution, with
-\code{terra::time()} set.}
+\item{u10_r, v10_r}{\code{terra::SpatRaster}, hourly resolution, \strong{non
+masque} -- le masquage se fait ici, une fois \code{wp_r} reduit a la
+resolution journaliere (voir note ci-dessous), et une seule fois plutot
+que separement sur u10_r et v10_r.}
 
 \item{reference_period}{Optional character vector \code{c("start","end")}.
 If provided, only the reference sub-period is returned.}
+
+\item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
+
+\item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
 }
 \value{
 Same structure as \code{wind_power()}: \code{list(data, time, lon, lat)}.

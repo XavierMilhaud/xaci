@@ -12,14 +12,31 @@ NULL
 #' Calculate maximum precipitation over a rolling window (terra version)
 #'
 #' @param r A \code{terra::SpatRaster}, hourly (or sub-daily) resolution
-#'   precipitation, with \code{terra::time()} set.
+#'   precipitation, with \code{terra::time()} set. \strong{Non masque} : le
+#'   masquage se fait ici, une fois les donnees reduites a la resolution
+#'   journaliere (voir note ci-dessous).
+#' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
+#' @param threshold Numeric threshold for the mask. Default \code{0.8}.
 #' @inheritParams calculate_maximum_precipitation_over_window
 #' @return Same structure as \code{calculate_maximum_precipitation_over_window()}.
 #' @export
 calculate_maximum_precipitation_over_window_terra <- function(r,
                                                               var_name    = "tp",
-                                                              window_size = 5L) {
+                                                              window_size = 5L,
+                                                              mask_path   = NULL,
+                                                              threshold   = 0.8) {
   daily_r <- resample_daily_terra(r, fun = "sum")
+
+  # Masquage APRES reduction horaire -> journaliere (et non avant, sur les
+  # donnees brutes) : le masque est purement spatial, identique a chaque pas
+  # de temps, donc l'ordre ne change pas le resultat -- mais masquer ~12800
+  # couches journalieres (35 ans) plutot que ~300000 couches horaires reste
+  # sous la limite de 65535 couches de terra::mask() et evite le traitement
+  # par blocs (bien plus lent) de apply_mask_terra().
+  if (!is.null(mask_path)) {
+    daily_r <- apply_mask_terra(daily_r, mask_path, threshold)
+  }
+
   daily   <- .spatraster_to_list(daily_r)
   .max_precipitation_from_daily(daily, var_name, window_size)
 }
@@ -58,9 +75,10 @@ precipitation_component_terra <- function(precipitation_data_path,
     }
     period_max <- readRDS(path)
   } else {
-    r <- load_component_terra(precipitation_data_path, var_name, mask_path)
-    period_max <- calculate_maximum_precipitation_over_window_terra(r, var_name,
-                                                                    window_size)
+    r <- load_netcdf_terra(precipitation_data_path, var_name)
+    period_max <- calculate_maximum_precipitation_over_window_terra(
+      r, var_name, window_size, mask_path = mask_path
+    )
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(period_max,
@@ -69,8 +87,10 @@ precipitation_component_terra <- function(precipitation_data_path,
   }
 
   # Resolution du masque admin : une SEULE couche suffit pour lon/lat.
+  # load_netcdf_terra() est lazy et NON masque : inutile de masquer ici, le
+  # masquage ne change ni les dimensions ni les coordonnees.
   if (is.null(admin_mask) && !is.null(admin_level)) {
-    tmp      <- load_component_terra(precipitation_data_path, var_name, mask_path)
+    tmp      <- load_netcdf_terra(precipitation_data_path, var_name)
     tmp_list <- .spatraster_to_list(tmp[[1]])
     admin_mask <- build_admin_mask(tmp_list$lon, tmp_list$lat, country_abbrev,
                                    admin_level, crs_metric)

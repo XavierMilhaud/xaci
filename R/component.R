@@ -1,3 +1,4 @@
+
 #' @title Base Climate Component Helpers
 #' @description Low-level helpers shared by all ACI component functions.
 #' @name component
@@ -83,6 +84,15 @@ resample_daily <- function(dataset, FUN = sum) {
     } else {
       out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2), FUN,
                           na.rm = TRUE)
+      # Une cellule entierement NA sur la fenetre (typiquement une cellule
+      # masquee par apply_mask()) ne doit JAMAIS produire une valeur
+      # numerique valide, quelle que soit FUN : sum(rep(NA, n), na.rm = TRUE)
+      # vaut 0 (et non NA), et une eventuelle FUN de comptage (ex. length())
+      # ignore totalement na.rm et compterait quand meme les n emplacements.
+      # On force donc explicitement NA quand TOUTES les valeurs source
+      # etaient NA, independamment du resultat que FUN a produit.
+      all_na <- apply(is.na(data[, , idx, drop = FALSE]), c(1, 2), all)
+      out[, , k][all_na] <- NA_real_
     }
   }
   # is.infinite() attrape -Inf (ex. max() sur une journee entierement NA) ET
@@ -119,10 +129,18 @@ resample_monthly <- function(dataset, FUN = mean) {
       idx <- which(month_key == months[k])
       out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2), FUN,
                           na.rm = TRUE)
+      # Voir la note equivalente dans resample_daily() : sum(all-NA,
+      # na.rm=TRUE) = 0, et un FUN de comptage (length()) ignorerait
+      # totalement na.rm -- on force donc NA quand tout etait NA en entree.
+      all_na <- apply(is.na(data[, , idx, drop = FALSE]), c(1, 2), all)
+      out[, , k][all_na] <- NA_real_
     }
   } else {
-    out <- vapply(months, function(m) FUN(data[month_key == m], na.rm = TRUE),
-                  numeric(1))
+    out <- vapply(months, function(m) {
+      x <- data[month_key == m]
+      if (all(is.na(x))) return(NA_real_)
+      FUN(x, na.rm = TRUE)
+    }, numeric(1))
   }
   # Voir la note equivalente dans resample_daily() : is.infinite() attrape
   # -Inf ET +Inf, contrairement a l'ancien test == -Inf.

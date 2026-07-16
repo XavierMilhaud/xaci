@@ -4,11 +4,17 @@
 \alias{max_consecutive_dry_days_terra}
 \title{Calculate maximum consecutive dry days (terra version)}
 \usage{
-max_consecutive_dry_days_terra(r)
+max_consecutive_dry_days_terra(r, mask_path = NULL, threshold = 0.8)
 }
 \arguments{
-\item{r}{A \code{terra::SpatRaster}, hourly (or sub-daily) resolution
-precipitation, with \code{terra::time()} set.}
+\item{r}{A \code{terra::SpatRaster}, hourly (or sub-daily)
+resolution precipitation, with \code{terra::time()} set. \strong{Non
+masque} : le masquage se fait ici, une fois les donnees reduites a la
+resolution journaliere (voir note ci-dessous).}
+
+\item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
+
+\item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
 }
 \value{
 Same structure as \code{max_consecutive_dry_days()}.

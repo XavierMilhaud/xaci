@@ -4,7 +4,13 @@
 \alias{load_component_terra}
 \title{Load a NetCDF variable and optionally apply a country mask (terra version)}
 \usage{
-load_component_terra(data_path, var_name, mask_path = NULL, threshold = 0.8)
+load_component_terra(
+  data_path,
+  var_name,
+  mask_path = NULL,
+  threshold = 0.8,
+  chunk_size = 20000
+)
 }
 \arguments{
 \item{data_path}{Path to the NetCDF file.}
@@ -14,6 +20,9 @@ load_component_terra(data_path, var_name, mask_path = NULL, threshold = 0.8)
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (default).}
 
 \item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
+
+\item{chunk_size}{Passe a \code{apply_mask_terra()} (voir sa doc) pour le
+cas ou \code{nlyr(r)} depasse la limite de 65535 couches.}
 }
 \value{
 A \code{terra::SpatRaster}.

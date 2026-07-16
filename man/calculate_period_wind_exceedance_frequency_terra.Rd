@@ -7,13 +7,19 @@
 calculate_period_wind_exceedance_frequency_terra(
   u10_r,
   v10_r,
-  reference_period
+  reference_period,
+  mask_path = NULL,
+  threshold = 0.8
 )
 }
 \arguments{
-\item{u10_r, v10_r}{\code{terra::SpatRaster}, hourly resolution.}
+\item{u10_r, v10_r}{\code{terra::SpatRaster}, hourly resolution, non masque.}
 
 \item{reference_period}{Character vector \code{c("start", "end")}.}
+
+\item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
+
+\item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
 }
 \value{
 Same as \code{calculate_period_wind_exceedance_frequency()}.

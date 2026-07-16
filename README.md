@@ -86,7 +86,7 @@ cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 # 2. Download all four ERA5 variables (t2m, tp, u10, v10) for France, 1960-2024
 # One NetCDF per variable is produced in data/era5/FRA/
 download_era5_all(
-  years          = 1960:2024,
+  years          = 2000:2024,
   area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
   country_abbrev = "FRA"
 )
@@ -448,9 +448,9 @@ Pass `engine = "terra"` — everything else stays the same:
 ```r
 calculate_aci(
   country_abbrev      = "FRA",
-  study_period        = c("1980-01-01", "2020-12-31"),
-  reference_period    = c("1991-01-01", "2020-12-31"),
-  years               = 1980:2020,
+  study_period        = c("1990-01-01", "2024-12-31"),
+  reference_period    = c("1990-01-01", "2010-12-31"),
+  years               = 1990:2024,
   granularity         = "month",
   area                = TRUE,
   factor              = 1 / 5,
@@ -483,10 +483,10 @@ exactly like its base-R counterpart (same arguments, same
 ```r
 temperature_component_terra(
   country_abbrev        = "FRA",
-  temperature_data_path  = "data/era5/FRA/t2m_1980_2020.nc",
+  temperature_data_path  = "data/era5/FRA/t2m_1960_2024.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
-  reference_period       = c("1991-01-01", "2020-12-31"),
-  study_period           = c("1980-01-01", "2020-12-31"),
+  reference_period       = c("1990-01-01", "2010-12-31"),
+  study_period           = c("1990-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
   save = TRUE, save_dir = "results/FRA"

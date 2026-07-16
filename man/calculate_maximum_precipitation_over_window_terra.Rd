@@ -7,17 +7,25 @@
 calculate_maximum_precipitation_over_window_terra(
   r,
   var_name = "tp",
-  window_size = 5L
+  window_size = 5L,
+  mask_path = NULL,
+  threshold = 0.8
 )
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster}, hourly (or sub-daily) resolution
-precipitation, with \code{terra::time()} set.}
+precipitation, with \code{terra::time()} set. \strong{Non masque} : le
+masquage se fait ici, une fois les donnees reduites a la resolution
+journaliere (voir note ci-dessous).}
 
 \item{var_name}{Variable name in \code{dataset}. Default \code{"tp"},
 inherited from ERA5 (variable name in the NetCDF).}
 
 \item{window_size}{Rolling window in DAYS. Default \code{5}.}
+
+\item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
+
+\item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
 }
 \value{
 Same structure as \code{calculate_maximum_precipitation_over_window()}.

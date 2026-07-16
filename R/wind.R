@@ -162,6 +162,13 @@ calculate_period_wind_exceedance_frequency <- function(u10_dataset, v10_dataset,
     s          <- apply(data[, , idx, drop = FALSE], c(1, 2), sum,    na.rm = TRUE)
     n          <- apply(data[, , idx, drop = FALSE], c(1, 2), length)
     out[, , k] <- s / n
+    # Meme piege que dans resample_daily()/resample_monthly() (component.R) :
+    # sum(rep(NA, n), na.rm = TRUE) vaut 0 et length() compte tous les
+    # emplacements, NA inclus -- une cellule entierement masquee donnerait
+    # donc 0/n = 0 (frequence "valide") au lieu de NA. On force explicitement
+    # NA quand tout etait NA en entree pour cette periode.
+    all_na <- apply(is.na(data[, , idx, drop = FALSE]), c(1, 2), all)
+    out[, , k][all_na] <- NA_real_
   }
 
   period_dates <- as.POSIXct(paste0(periods, "-01"),

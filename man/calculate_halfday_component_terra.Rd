@@ -10,12 +10,16 @@ calculate_halfday_component_terra(
   part_of_day,
   extremum,
   percentile,
-  above_thresholds
+  above_thresholds,
+  mask_path = NULL,
+  threshold = 0.8
 )
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster}, hourly resolution, temperature
-already in the desired unit (e.g. Celsius), with \code{terra::time()} set.}
+already in the desired unit (e.g. Celsius), with \code{terra::time()} set.
+\strong{Non masque} : le masquage se fait ici, une fois les donnees
+reduites (voir note ci-dessous).}
 
 \item{reference_period}{Character vector \code{c("YYYY-MM-DD", "YYYY-MM-DD")}.}
 
@@ -27,6 +31,10 @@ already in the desired unit (e.g. Celsius), with \code{terra::time()} set.}
 
 \item{above_thresholds}{Logical. \code{TRUE} counts days above the threshold
 (hot extremes); \code{FALSE} counts days below (cold extremes).}
+
+\item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
+
+\item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
 }
 \value{
 Same structure as \code{calculate_halfday_component()}:

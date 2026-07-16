@@ -15,16 +15,32 @@ NULL
 #'
 #' @param r A \code{terra::SpatRaster}, hourly resolution, temperature
 #'   already in the desired unit (e.g. Celsius), with \code{terra::time()} set.
+#'   \strong{Non masque} : le masquage se fait ici, une fois les donnees
+#'   reduites (voir note ci-dessous).
+#' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
+#' @param threshold Numeric threshold for the mask. Default \code{0.8}.
 #' @inheritParams calculate_halfday_component
 #' @return Same structure as \code{calculate_halfday_component()}:
 #'   \code{list(data, time, lon, lat)}.
 #' @export
 calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
                                               extremum, percentile,
-                                              above_thresholds) {
+                                              above_thresholds,
+                                              mask_path = NULL, threshold = 0.8) {
   daily_ext_r  <- temp_extremum_terra(r, extremum, part_of_day)
   thresholds_r <- calculate_percentiles_terra(r, percentile, reference_period,
                                               part_of_day)
+
+  # Masquage APRES reduction (et non sur r brut, hourly, en amont) : le
+  # masque est purement spatial (identique a chaque pas de temps), donc
+  # l'ordre ne change pas le resultat -- mais daily_ext_r (~12800 couches
+  # pour 35 ans) et thresholds_r (366 couches) restent tous deux largement
+  # sous la limite de 65535 couches de terra::mask(), contrairement a r brut
+  # (~300000 couches horaires) qui la depasse.
+  if (!is.null(mask_path)) {
+    daily_ext_r  <- apply_mask_terra(daily_ext_r, mask_path, threshold)
+    thresholds_r <- apply_mask_terra(thresholds_r, mask_path, threshold)
+  }
 
   daily_ext      <- .spatraster_to_list(daily_ext_r)          # [lon x lat x jours]
   thresholds_day <- .spatraster_to_array_only(thresholds_r)   # [lon x lat x 366]
@@ -72,15 +88,15 @@ temperature_component_terra <- function(temperature_data_path,
     }
     combined <- readRDS(path)
   } else {
-    r <- load_component_terra(temperature_data_path, "t2m", mask_path)
+    r <- load_netcdf_terra(temperature_data_path, "t2m")
     r <- r - 273.15   # Kelvin -> Celsius ; reste paresseux (SpatRaster)
 
     day_comp   <- calculate_halfday_component_terra(r, reference_period, "day",
                                                     extremum, percentile,
-                                                    above_thresholds)
+                                                    above_thresholds, mask_path)
     night_comp <- calculate_halfday_component_terra(r, reference_period, "night",
                                                     extremum, percentile,
-                                                    above_thresholds)
+                                                    above_thresholds, mask_path)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,
@@ -97,9 +113,11 @@ temperature_component_terra <- function(temperature_data_path,
 
   # Resolution du masque admin : une SEULE couche suffit pour recuperer
   # lon/lat (contrairement a la version base-R qui rechargeait tout le cube
-  # horaire une seconde fois rien que pour ca).
+  # horaire une seconde fois rien que pour ca). load_netcdf_terra() est lazy
+  # et NON masque : inutile de masquer ici, le masquage ne change ni les
+  # dimensions ni les coordonnees.
   if (is.null(admin_mask) && !is.null(admin_level)) {
-    tmp      <- load_component_terra(temperature_data_path, "t2m", mask_path)
+    tmp      <- load_netcdf_terra(temperature_data_path, "t2m")
     tmp_list <- .spatraster_to_list(tmp[[1]])
     admin_mask <- build_admin_mask(tmp_list$lon, tmp_list$lat, country_abbrev,
                                    admin_level, crs_metric)

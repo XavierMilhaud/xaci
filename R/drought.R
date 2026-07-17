@@ -62,8 +62,18 @@ max_consecutive_dry_days <- function(dataset) {
       }
 
       for (k in seq_along(years)) {
-        idx_yr <- which(year_index == years[k])
-        out[i, j, k] <- max(cdd_series[idx_yr], na.rm = TRUE)
+        idx_yr  <- which(year_index == years[k])
+        vals_yr <- cdd_series[idx_yr]
+        # max(rep(NA, n), na.rm = TRUE) vaut -Inf (pas NA) et emet un
+        # warning -- une cellule masquee sur une annee calendaire entiere
+        # (toutes ses valeurs NA pour cette annee) tomberait dans ce cas.
+        # On evite explicitement d'appeler max() sur un vecteur vide apres
+        # retrait des NA, pour ne pas laisser fuiter -Inf dans le resultat.
+        out[i, j, k] <- if (all(is.na(vals_yr))) {
+          NA_real_
+        } else {
+          max(vals_yr, na.rm = TRUE)
+        }
       }
     }
   }
@@ -203,6 +213,11 @@ drought_component <- function(precipitation_data_path,
     return(standardize_metric(cdd_monthly, reference_period, area))
   }
   standardized <- standardize_metric(cdd_monthly, reference_period, area = FALSE)
-  reduce_dataarray_to_dataframe(standardized, column_name = "drought",
-                                admin_mask = admin_mask)
+  out <- reduce_dataarray_to_dataframe(standardized, column_name = "drought",
+                                       admin_mask = admin_mask)
+  effective_admin_level <- if (!is.null(admin_level)) admin_level else admin_mask$admin_level
+  .attach_spatial_attrs(out,
+                        country_abbrev = country_abbrev,
+                        admin_level    = effective_admin_level,
+                        crs_metric     = crs_metric)
 }

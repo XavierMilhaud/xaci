@@ -148,6 +148,16 @@ precipitation_component <- function(precipitation_data_path,
     return(standardize_metric(period_max, reference_period, area))
   }
   standardized <- standardize_metric(period_max, reference_period, area = FALSE)
-  reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
-                                admin_mask = admin_mask)
+  out <- reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
+                                       admin_mask = admin_mask)
+  # admin_level peut ne pas avoir ete fourni ici si admin_mask a ete
+  # construit ailleurs et transmis directement (cf. build_admin_mask()) :
+  # on retombe alors sur celui memorise dans admin_mask lui-meme, pour que
+  # plot_aci_map() puisse determiner country_abbrev/admin_level sans que
+  # l'utilisateur ait besoin de les repreciser.
+  effective_admin_level <- if (!is.null(admin_level)) admin_level else admin_mask$admin_level
+  .attach_spatial_attrs(out,
+                        country_abbrev = country_abbrev,
+                        admin_level    = effective_admin_level,
+                        crs_metric     = crs_metric)
 }

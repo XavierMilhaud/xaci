@@ -584,10 +584,12 @@ build_admin_mask <- function(lon, lat, country_abbrev,
   }
 
   list(
-    weights = weights,
-    units   = unique(admin_sf$name),
-    lon     = lon,
-    lat     = lat
+    weights        = weights,
+    units          = unique(admin_sf$name),
+    lon            = lon,
+    lat            = lat,
+    country_abbrev = country_abbrev,
+    admin_level    = admin_level
   )
 }
 

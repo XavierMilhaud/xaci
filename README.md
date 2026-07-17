@@ -86,7 +86,7 @@ cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 # 2. Download all four ERA5 variables (t2m, tp, u10, v10) for France, 1960-2024
 # One NetCDF per variable is produced in data/era5/FRA/
 download_era5_all(
-  years          = 2000:2024,
+  years          = 1960:2024,
   area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
   country_abbrev = "FRA"
 )
@@ -152,12 +152,12 @@ calculate_aci(
 )
 
 # Produces, in results/FRA/:
-#   temperature_t90_2011_2015.rds
-#   temperature_t10_2011_2015.rds
-#   precipitation_2011_2015.rds
-#   drought_2011_2015.rds
-#   wind_2011_2015.rds
-#   sealevel_2011_2015.rds
+#   temperature_t90_startStudyYear_endStudyYear.rds
+#   temperature_t10_startStudyYear_endStudyYear.rds
+#   precipitation_startStudyYear_endStudyYear.rds
+#   drought_startStudyYear_endStudyYear.rds
+#   wind_startStudyYear_endStudyYear.rds
+#   sealevel_startStudyYear_endStudyYear.rds
 ```
 
 Components can also be computed one at a time (e.g. to parallelise the work,
@@ -244,11 +244,10 @@ grid_aci_FRA <- calculate_aci(
 # grid_aci_FRA$t90, $t10,
 #   $precipitation, $drought,
 #   $wind, $sealevel, $ACI       : arrays [lon x lat x time]
-
+# dim(grid_aci_FRA$t90)
 # dim(grid_aci_FRA$sealevel)
-# grid_aci_FRA$sealevel : only NA values, unexpected: some ERA5 cells are coastal!
 
-class(grid_aci_FRA)       # 60 months, 96 departments over 7 variables (ACI and its 6 components) = 672 columns
+class(grid_aci_FRA)
 attributes(grid_aci_FRA)
 class(grid_aci_FRA$lon)
 dim(grid_aci_FRA$lon)     # 63 grid cells on longitude
@@ -307,6 +306,7 @@ precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   mask_path               = "data/era5/FRA/mask_FRA.nc",
   reference_period        = c("2011-01-01", "2013-12-31"),
+  study_period            = c("2011-01-01", "2015-12-31"),
   var_name                = "tp", window_size = 5L,
   area                    = FALSE, admin_level = NULL,
   save                    = TRUE, save_dir = "results/FRA"
@@ -317,6 +317,7 @@ drought_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   mask_path               = "data/era5/FRA/mask_FRA.nc",
   reference_period        = c("2011-01-01", "2013-12-31"),
+  study_period            = c("2011-01-01", "2015-12-31"),
   area                    = FALSE, admin_level = NULL,
   save                    = TRUE, save_dir = "results/FRA"
 )
@@ -327,6 +328,7 @@ wind_component(
   wind_v10_data_path = "data/era5/FRA/v10_2011_2015.nc",
   mask_path          = "data/era5/FRA/mask_FRA.nc",
   reference_period   = c("2011-01-01", "2013-12-31"),
+  study_period       = c("2011-01-01", "2015-12-31"),
   area               = FALSE, admin_level = NULL,
   save               = TRUE, save_dir = "results/FRA"
 )
@@ -338,6 +340,7 @@ temperature_component(
   temperature_data_path  = "data/era5/FRA/t2m_2011_2015.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
   reference_period       = c("2011-01-01", "2013-12-31"),
+  study_period           = c("2011-01-01", "2015-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
   save = TRUE, save_dir = "results/FRA"
@@ -347,6 +350,7 @@ temperature_component(
   temperature_data_path  = "data/era5/FRA/t2m_2011_2015.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
   reference_period       = c("2011-01-01", "2013-12-31"),
+  study_period           = c("2011-01-01", "2015-12-31"),
   percentile = 10, extremum = "min", above_thresholds = FALSE,
   area = FALSE, admin_level = NULL,
   save = TRUE, save_dir = "results/FRA"
@@ -371,9 +375,11 @@ prec_national <- precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   mask_path               = "data/era5/FRA/mask_FRA.nc",
   reference_period        = c("2011-01-01", "2013-12-31"),
+  study_period            = c("2011-01-01", "2015-12-31"),
   area                    = TRUE,
   computed_components     = TRUE, load_dir = "results/FRA"
 )
+prec_national
 
 sealevel_national <- sealevel_component(
   country_abbrev   = "FRA",
@@ -382,6 +388,7 @@ sealevel_national <- sealevel_component(
   area             = TRUE,
   computed_components = TRUE, load_dir = "results/FRA"
 )
+sealevel_national
 ```
 
 ### Administrative unit level
@@ -400,6 +407,7 @@ prec_admin_L1 <- precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   mask_path               = "data/era5/FRA/mask_FRA.nc",
   reference_period        = c("2011-01-01", "2013-12-31"),
+  study_period            = c("2011-01-01", "2015-12-31"),
   area                    = FALSE,
   admin_mask              = admin_mask_L1,
   computed_components     = TRUE, load_dir = "results/FRA"
@@ -448,9 +456,9 @@ Pass `engine = "terra"` — everything else stays the same:
 ```r
 calculate_aci(
   country_abbrev      = "FRA",
-  study_period        = c("1990-01-01", "2024-12-31"),
-  reference_period    = c("1990-01-01", "2010-12-31"),
-  years               = 1990:2024,
+  study_period        = c("2000-01-01", "2024-12-31"),
+  reference_period    = c("2000-01-01", "2010-12-31"),
+  years               = 2000:2024,
   granularity         = "month",
   area                = TRUE,
   factor              = 1 / 5,
@@ -483,10 +491,10 @@ exactly like its base-R counterpart (same arguments, same
 ```r
 temperature_component_terra(
   country_abbrev        = "FRA",
-  temperature_data_path  = "data/era5/FRA/t2m_1960_2024.nc",
+  temperature_data_path  = "data/era5/FRA/t2m_2000_2024.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
-  reference_period       = c("1990-01-01", "2010-12-31"),
-  study_period           = c("1990-01-01", "2024-12-31"),
+  reference_period       = c("2000-01-01", "2010-12-31"),
+  study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
   save = TRUE, save_dir = "results/FRA"

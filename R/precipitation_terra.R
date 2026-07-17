@@ -101,6 +101,11 @@ precipitation_component_terra <- function(precipitation_data_path,
     return(standardize_metric(period_max, reference_period, area))
   }
   standardized <- standardize_metric(period_max, reference_period, area = FALSE)
-  reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
-                                admin_mask = admin_mask)
+  out <- reduce_dataarray_to_dataframe(standardized, column_name = "precipitation",
+                                       admin_mask = admin_mask)
+  effective_admin_level <- if (!is.null(admin_level)) admin_level else admin_mask$admin_level
+  .attach_spatial_attrs(out,
+                        country_abbrev = country_abbrev,
+                        admin_level    = effective_admin_level,
+                        crs_metric     = crs_metric)
 }

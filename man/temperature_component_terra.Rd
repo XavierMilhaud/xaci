@@ -17,6 +17,7 @@ temperature_component_terra(
   admin_level = NULL,
   admin_mask = NULL,
   crs_metric = 4326,
+  cores = 1L,
   computed_components = FALSE,
   save = FALSE,
   save_dir = paste0("results/", country_abbrev),
@@ -52,6 +53,10 @@ distinct runs over different study windows don't collide or get mixed up.}
 \code{NULL}.}
 
 \item{crs_metric}{EPSG code. Default \code{4326}.}
+
+\item{cores}{Passed through to \code{calculate_halfday_component_terra()} /
+\code{calculate_percentiles_terra()} (see its performance note on
+\code{terra::roll()} having no built-in parallelism). Default \code{1}.}
 
 \item{computed_components}{Logical. Default \code{FALSE}.}
 

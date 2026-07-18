@@ -19,6 +19,10 @@ NULL
 #'   reduites (voir note ci-dessous).
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param cores Passed to \code{calculate_percentiles_terra()}'s own
+#'   \code{cores} (see its performance note) -- the rolling-window percentile
+#'   step is by far the most expensive part of this function. Default
+#'   \code{1} (sequential, identical to previous behaviour).
 #' @inheritParams calculate_halfday_component
 #' @return Same structure as \code{calculate_halfday_component()}:
 #'   \code{list(data, time, lon, lat)}.
@@ -26,10 +30,22 @@ NULL
 calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
                                               extremum, percentile,
                                               above_thresholds,
-                                              mask_path = NULL, threshold = 0.8) {
+                                              mask_path = NULL, threshold = 0.8,
+                                              cores = 1L) {
   daily_ext_r  <- temp_extremum_terra(r, extremum, part_of_day)
   thresholds_r <- calculate_percentiles_terra(r, percentile, reference_period,
-                                              part_of_day)
+                                              part_of_day, cores = cores)
+
+  # Conversion Kelvin -> Celsius APRES reduction (et non sur r brut, hourly,
+  # en amont) : max/min et quantile sont tous deux INVARIANTS PAR
+  # TRANSLATION (max(x - c) = max(x) - c ; quantile(x - c, p) = quantile(x, p)
+  # - c), donc le resultat final est rigoureusement identique -- mais
+  # soustraire une constante sur r brut (~219000 couches pour 25 ans)
+  # declenche la MEME limite interne de terra que terra::mask() ("[-] cannot
+  # write more than 65535 layers"), alors que daily_ext_r (~12800 couches) et
+  # thresholds_r (366 couches) restent tous deux largement en dessous.
+  daily_ext_r  <- daily_ext_r  - 273.15
+  thresholds_r <- thresholds_r - 273.15
 
   # Masquage APRES reduction (et non sur r brut, hourly, en amont) : le
   # masque est purement spatial (identique a chaque pas de temps), donc
@@ -55,6 +71,9 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
 #' intended for full-resolution, grid-cell-level ("area = FALSE") workflows
 #' over long historical periods (40+ years hourly).
 #'
+#' @param cores Passed through to \code{calculate_halfday_component_terra()} /
+#'   \code{calculate_percentiles_terra()} (see its performance note on
+#'   \code{terra::roll()} having no built-in parallelism). Default \code{1}.
 #' @inheritParams temperature_component
 #' @return Same as \code{temperature_component()}: a standardized metric list,
 #'   or a data frame if \code{admin_mask}/\code{admin_level} is provided.
@@ -71,6 +90,7 @@ temperature_component_terra <- function(temperature_data_path,
                                         admin_level           = NULL,
                                         admin_mask            = NULL,
                                         crs_metric            = 4326,
+                                        cores                 = 1L,
                                         computed_components   = FALSE,
                                         save                  = FALSE,
                                         save_dir              = paste0("results/", country_abbrev),
@@ -89,14 +109,19 @@ temperature_component_terra <- function(temperature_data_path,
     combined <- readRDS(path)
   } else {
     r <- load_netcdf_terra(temperature_data_path, "t2m")
-    r <- r - 273.15   # Kelvin -> Celsius ; reste paresseux (SpatRaster)
+    # Kelvin -> Celsius : deplace dans calculate_halfday_component_terra(),
+    # APRES reduction temporelle (voir la note associee la-bas) -- r reste
+    # ici en Kelvin, ce qui n'a aucune incidence puisque max/min et quantile
+    # sont invariants par translation.
 
     day_comp   <- calculate_halfday_component_terra(r, reference_period, "day",
                                                     extremum, percentile,
-                                                    above_thresholds, mask_path)
+                                                    above_thresholds, mask_path,
+                                                    cores = cores)
     night_comp <- calculate_halfday_component_terra(r, reference_period, "night",
                                                     extremum, percentile,
-                                                    above_thresholds, mask_path)
+                                                    above_thresholds, mask_path,
+                                                    cores = cores)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,

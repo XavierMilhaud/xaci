@@ -29,7 +29,8 @@ Imports:
     rnaturalearth,
     geodata,
     terra,
-    units
+    units,
+    parallel
 Suggests:
     testthat (>= 3.0.0),
     patchwork (>= 1.1.0),

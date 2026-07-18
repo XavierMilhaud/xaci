@@ -57,8 +57,9 @@ calculate_maximum_precipitation_over_window <- function(dataset,
   out <- array(NA_real_, c(nl, nw, length(periods)))
   for (k in seq_along(periods)) {
     idx        <- which(key == periods[k])
-    out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2),
-                        max, na.rm = TRUE)
+    out[, , k] <- suppressWarnings(
+      apply(data[, , idx, drop = FALSE], c(1, 2), max, na.rm = TRUE)
+    )
   }
   # Seul max() est utilise ici, donc seul -Inf pouvait apparaitre en
   # pratique -- is.infinite() est garde par coherence avec resample_daily()/

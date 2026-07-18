@@ -1,4 +1,3 @@
-
 #' @title Base Climate Component Helpers
 #' @description Low-level helpers shared by all ACI component functions.
 #' @name component
@@ -82,8 +81,13 @@ resample_daily <- function(dataset, FUN = sum) {
     if (length(idx) == 1L) {
       out[, , k] <- data[, , idx]
     } else {
-      out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2), FUN,
-                          na.rm = TRUE)
+      # suppressWarnings() : sur une cellule entierement NA (ex. masquee),
+      # FUN=max/min emet "no non-missing arguments to max/min" avant meme
+      # qu'on corrige la valeur ci-dessous -- purement du bruit puisqu'on
+      # gere deja explicitement ce cas juste apres (all_na).
+      out[, , k] <- suppressWarnings(
+        apply(data[, , idx, drop = FALSE], c(1, 2), FUN, na.rm = TRUE)
+      )
       # Une cellule entierement NA sur la fenetre (typiquement une cellule
       # masquee par apply_mask()) ne doit JAMAIS produire une valeur
       # numerique valide, quelle que soit FUN : sum(rep(NA, n), na.rm = TRUE)
@@ -127,8 +131,9 @@ resample_monthly <- function(dataset, FUN = mean) {
     out  <- array(NA_real_, c(dims[1], dims[2], length(months)))
     for (k in seq_along(months)) {
       idx <- which(month_key == months[k])
-      out[, , k] <- apply(data[, , idx, drop = FALSE], c(1, 2), FUN,
-                          na.rm = TRUE)
+      out[, , k] <- suppressWarnings(
+        apply(data[, , idx, drop = FALSE], c(1, 2), FUN, na.rm = TRUE)
+      )
       # Voir la note equivalente dans resample_daily() : sum(all-NA,
       # na.rm=TRUE) = 0, et un FUN de comptage (length()) ignorerait
       # totalement na.rm -- on force donc NA quand tout etait NA en entree.

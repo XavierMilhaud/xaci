@@ -4,7 +4,14 @@
 \alias{calculate_percentiles_terra}
 \title{Compute temperature percentile thresholds for each day of year (terra version)}
 \usage{
-calculate_percentiles_terra(r, n, reference_period, part_of_day, filename = "")
+calculate_percentiles_terra(
+  r,
+  n,
+  reference_period,
+  part_of_day,
+  filename = "",
+  cores = 1L
+)
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster}, hourly resolution, with
@@ -18,6 +25,11 @@ base-R version).}
 \item{part_of_day}{\code{"day"} or \code{"night"}.}
 
 \item{filename}{Optional output path for the final thresholds.}
+
+\item{cores}{Positive integer. If \code{cores > 1}, split the raster into
+that many row-wise spatial tiles and process them in parallel worker
+processes (see performance note above). Default \code{1} (sequential,
+identical to previous behaviour).}
 }
 \value{
 A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
@@ -29,4 +41,19 @@ the rolling-window quantile, whose exact argument names have changed across
 terra versions -- check \code{?terra::roll} against your installed version
 (\code{packageVersion("terra")}) and validate on a small subset before
 running on the full 40-year series.
+}
+\details{
+\strong{Performance note:} the rolling-window quantile
+(\code{terra::roll()}) is by far the most expensive step of the whole
+\code{*_terra} pipeline -- it invokes a custom R callback
+(\code{stats::quantile()}) at every timestep of \code{reference_period}
+(filtered to day/night hours), for every cell. Unlike \code{terra::tapp()},
+\code{terra::roll()} has no built-in \code{cores} argument in the terra
+version this package was tested against (1.7.65) -- there is no GPU path
+either (neither terra/GDAL nor base R ship a GPU rolling-quantile
+primitive). Set \code{cores > 1} to work around this: the raster is split
+into \code{cores} row-wise spatial tiles (independent computation, no
+cross-tile dependency, so this cannot change the result), each processed
+in a separate worker process via \code{parallel::makeCluster()}, and the
+366-layer outputs are merged back together.
 }

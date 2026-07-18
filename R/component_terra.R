@@ -176,7 +176,10 @@ resample_daily_terra <- function(r, fun = "mean", filename = "") {
   # na.rm = TRUE, que `fun` soit fourni en chaine ou en fonction, pour
   # rester coherent avec resample_daily() (base R).
   base_fun <- if (is.character(fun)) get(fun, mode = "function") else fun
-  fun_narm <- function(x, ...) base_fun(x, na.rm = TRUE)
+  # suppressWarnings() : sur un groupe (jour) entierement NA, base_fun (max/
+  # min) emet "no non-missing arguments" avant meme la correction -Inf/+Inf
+  # -> NA ci-dessous -- purement du bruit puisque ce cas est deja gere.
+  fun_narm <- function(x, ...) suppressWarnings(base_fun(x, na.rm = TRUE))
 
   out <- terra::tapp(r, index = day_idx, fun = fun_narm, filename = "")
 
@@ -231,16 +234,34 @@ temp_extremum_terra <- function(r, extremum, period, filename = "") {
 #' (\code{packageVersion("terra")}) and validate on a small subset before
 #' running on the full 40-year series.
 #'
+#' \strong{Performance note:} the rolling-window quantile
+#' (\code{terra::roll()}) is by far the most expensive step of the whole
+#' \code{*_terra} pipeline -- it invokes a custom R callback
+#' (\code{stats::quantile()}) at every timestep of \code{reference_period}
+#' (filtered to day/night hours), for every cell. Unlike \code{terra::tapp()},
+#' \code{terra::roll()} has no built-in \code{cores} argument in the terra
+#' version this package was tested against (1.7.65) -- there is no GPU path
+#' either (neither terra/GDAL nor base R ship a GPU rolling-quantile
+#' primitive). Set \code{cores > 1} to work around this: the raster is split
+#' into \code{cores} row-wise spatial tiles (independent computation, no
+#' cross-tile dependency, so this cannot change the result), each processed
+#' in a separate worker process via \code{parallel::makeCluster()}, and the
+#' 366-layer outputs are merged back together.
+#'
 #' @inheritParams calculate_percentiles
 #' @param r A \code{terra::SpatRaster}, hourly resolution, with
 #'   \code{terra::time()} set (replaces the \code{dataset} argument of the
 #'   base-R version).
 #' @param filename Optional output path for the final thresholds.
+#' @param cores Positive integer. If \code{cores > 1}, split the raster into
+#'   that many row-wise spatial tiles and process them in parallel worker
+#'   processes (see performance note above). Default \code{1} (sequential,
+#'   identical to previous behaviour).
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @export
 #' @importFrom terra time roll tapp
 calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
-                                        filename = "") {
+                                        filename = "", cores = 1L) {
   window_size <- if (part_of_day == "day") {
     80L
   } else if (part_of_day == "night") {
@@ -258,6 +279,36 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   ref_mask  <- terra::time(r_sub) >= ref_start & terra::time(r_sub) <= ref_end
   r_ref     <- r_sub[[ref_mask]]
 
+  out_full <- if (cores <= 1L) {
+    .calculate_percentiles_terra_core(r_ref, n, window_size, cores_tapp = 1L)
+  } else {
+    .calculate_percentiles_terra_tiled(r_ref, n, window_size, cores)
+  }
+
+  if (nzchar(filename)) terra::writeRaster(out_full, filename, overwrite = TRUE)
+  out_full
+}
+
+#' Core sequential percentile computation (no tiling/parallelism)
+#'
+#' Extracted from \code{calculate_percentiles_terra()} so that the parallel,
+#' tiled code path (\code{.calculate_percentiles_terra_tiled()}) can call the
+#' EXACT same logic per-tile, guaranteeing byte-for-byte identical results to
+#' the sequential path -- parallelism only changes HOW the computation is
+#' split across processes, never the computation itself.
+#'
+#' @param r_ref SpatRaster, already filtered to day/night hours and to
+#'   \code{reference_period}, with \code{terra::time()} set.
+#' @param n Percentile (0-100).
+#' @param window_size Rolling window size (80 for day, 40 for night).
+#' @param cores_tapp Passed to \code{terra::tapp()}'s own \code{cores}
+#'   argument for the day-of-year grouping step. Kept separate from the
+#'   tiling-level \code{cores} of \code{calculate_percentiles_terra()}: when
+#'   called from within a tiling worker, this should stay \code{1} to avoid
+#'   nesting parallel clusters inside parallel workers.
+#' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
+#' @noRd
+.calculate_percentiles_terra_core <- function(r_ref, n, window_size, cores_tapp = 1L) {
   qfun <- function(x, ...) stats::quantile(x, probs = n / 100, na.rm = TRUE)
 
   # Quantile glissant (fenetre centree, window_size pas de temps), traite par
@@ -300,7 +351,8 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   day_ref <- as.integer(format(terra::time(r_ref), "%j"))
   day_idx <- factor(day_ref, levels = 1:366)
 
-  out <- terra::tapp(rolled, index = day_idx, fun = qfun, filename = "")
+  out <- terra::tapp(rolled, index = day_idx, fun = qfun, filename = "",
+                     cores = cores_tapp)
 
   # CORRECTIF 3 : quand un jour-de-l'annee (typiquement le 366e, sur des annees non bissextiles)
   # n'apparait jamais dans la periode de reference, terra::tapp() ne produit
@@ -323,9 +375,94 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   layers <- rep(list(na_layer), 366)
   for (k in seq_along(present_days)) layers[[present_days[k]]] <- out[[k]]
 
-  out_full <- terra::rast(layers)
-  if (nzchar(filename)) terra::writeRaster(out_full, filename, overwrite = TRUE)
-  out_full
+  terra::rast(layers)
+}
+
+#' Tiled/parallel percentile computation
+#'
+#' Splits \code{r_ref} into \code{cores} contiguous, non-overlapping row-wise
+#' spatial tiles, processes each tile in a separate worker process (via
+#' \code{.calculate_percentiles_terra_core()} -- the exact same sequential
+#' logic, so results are identical to the non-tiled path), and merges the
+#' resulting 366-layer tiles back into a single full-extent SpatRaster.
+#'
+#' The rolling-window quantile (\code{terra::roll()}) is purely a per-cell,
+#' independent-in-space computation (no cross-cell dependency), so splitting
+#' the grid spatially and recombining afterwards cannot change the result --
+#' only how the work is distributed across processes.
+#'
+#' SpatRaster objects hold external C++ pointers that cannot be sent as-is to
+#' another R process; \code{terra::wrap()}/\code{terra::unwrap()} are used to
+#' (de)serialize tiles across the cluster, as recommended by the terra
+#' documentation for parallel use.
+#'
+#' @inheritParams .calculate_percentiles_terra_core
+#' @param cores Number of tiles/worker processes.
+#' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
+#' @noRd
+.calculate_percentiles_terra_tiled <- function(r_ref, n, window_size, cores) {
+  nr      <- terra::nrow(r_ref)
+  n_tiles <- max(1L, min(as.integer(cores), nr))
+
+  row_breaks <- floor(seq(0, nr, length.out = n_tiles + 1L))
+  yres <- terra::yres(r_ref)
+
+  tiles <- vector("list", n_tiles)
+  for (t in seq_len(n_tiles)) {
+    r1 <- row_breaks[t] + 1L
+    r2 <- row_breaks[t + 1L]
+    # yFromRow() decroit avec le numero de ligne (convention terra, lignes
+    # numerotees du haut/nord vers le bas/sud) : on reconstruit une etendue
+    # [y_min, y_max] correcte quel que soit le sens.
+    y_r1 <- terra::yFromRow(r_ref, r1)
+    y_r2 <- terra::yFromRow(r_ref, r2)
+    e <- terra::ext(terra::xmin(r_ref), terra::xmax(r_ref),
+                    min(y_r1, y_r2) - yres / 2, max(y_r1, y_r2) + yres / 2)
+    tiles[[t]] <- terra::crop(r_ref, e)
+  }
+
+  wrapped_tiles <- lapply(tiles, terra::wrap)
+
+  # PSOCK inconditionnellement (pas seulement sous Windows) : GDAL/terra n'est
+  # PAS fork-safe -- son etat interne C++ (connexions GDAL, etc.) peut se
+  # corrompre apres un fork(), y compris sous Linux/macOS. Verifie
+  # empiriquement dans ce package : un cluster FORK plante silencieusement
+  # ("Killed") sur des objets terra la ou PSOCK fonctionne de facon fiable.
+  cl <- parallel::makeCluster(n_tiles, type = "PSOCK")
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  parallel::clusterEvalQ(cl, { library(terra) })
+
+  # Un cluster PSOCK est un processus R totalement independant, qui ne peut
+  # PAS retrouver le namespace du package via library(xaci) tant que le
+  # package n'est pas formellement installe (ex. sous devtools::load_all()/
+  # devtools::test(), qui NE cree PAS un package "installe" au sens ou un
+  # nouveau processus pourrait le charger). On detache donc explicitement
+  # .calculate_percentiles_terra_core() de l'espace de noms du package en
+  # rattachant sa closure a globalenv() avant de l'envoyer au worker comme
+  # une VALEUR autonome (argument de parLapply, pas une reference "xaci:::").
+  # Ceci est sans danger : la fonction n'appelle que des fonctions
+  # explicitement qualifiees (terra::, stats::), jamais un autre helper
+  # interne du package.
+  core_fun <- .calculate_percentiles_terra_core
+  environment(core_fun) <- globalenv()
+
+  results_wrapped <- parallel::parLapply(
+    cl, wrapped_tiles,
+    function(wt, n, window_size, core_fun) {
+      tile_r <- terra::unwrap(wt)
+      # cores_tapp = 1 : chaque tuile tourne DEJA dans son propre processus
+      # (parallelisme au niveau des tuiles) -- inutile, et risque, d'ouvrir
+      # un SECOND cluster imbrique pour le tapp() interne de cette meme tuile.
+      out <- core_fun(tile_r, n, window_size, cores_tapp = 1L)
+      terra::wrap(out)
+    },
+    n = n, window_size = window_size, core_fun = core_fun
+  )
+
+  tile_results <- lapply(results_wrapped, terra::unwrap)
+
+  if (length(tile_results) == 1L) return(tile_results[[1]])
+  do.call(terra::merge, tile_results)
 }
 
 #' Reorient a terra array to the package's [lon x lat x layer] convention

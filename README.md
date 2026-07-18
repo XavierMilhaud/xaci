@@ -86,7 +86,7 @@ cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 # 2. Download all four ERA5 variables (t2m, tp, u10, v10) for France, 1960-2024
 # One NetCDF per variable is produced in data/era5/FRA/
 download_era5_all(
-  years          = 1960:2024,
+  years          = 2010:2020,
   area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
   country_abbrev = "FRA"
 )
@@ -457,7 +457,7 @@ Pass `engine = "terra"` — everything else stays the same:
 calculate_aci(
   country_abbrev      = "FRA",
   study_period        = c("2000-01-01", "2024-12-31"),
-  reference_period    = c("2000-01-01", "2010-12-31"),
+  reference_period    = c("2000-01-01", "2012-12-31"),
   years               = 2000:2024,
   granularity         = "month",
   area                = TRUE,
@@ -491,6 +491,17 @@ exactly like its base-R counterpart (same arguments, same
 ```r
 temperature_component_terra(
   country_abbrev        = "FRA",
+  temperature_data_path  = "data/era5/FRA/t2m_2010_2020.nc",
+  mask_path              = "data/era5/FRA/mask_FRA.nc",
+  reference_period       = c("2010-01-01", "2015-12-31"),
+  study_period           = c("2010-01-01", "2020-12-31"),
+  percentile = 10, extremum = "min", above_thresholds = FALSE,
+  area = FALSE, admin_level = NULL,
+  cores = 12, save = TRUE, save_dir = "results/FRA"
+)
+
+temperature_component_terra(
+  country_abbrev        = "FRA",
   temperature_data_path  = "data/era5/FRA/t2m_2000_2024.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
   reference_period       = c("2000-01-01", "2010-12-31"),
@@ -499,6 +510,31 @@ temperature_component_terra(
   area = FALSE, admin_level = NULL,
   save = TRUE, save_dir = "results/FRA"
 )
+
+sealevel_component(
+  country_abbrev   = "FRA",
+  study_period     = c("2000-01-01", "2024-12-31"),
+  reference_period = c("2000-01-01", "2010-12-31"),
+  mask_path        = "data/era5/FRA/mask_FRA.nc",
+  area             = FALSE,
+  max_dist_km      = 500,
+  sealevel_dir     = NULL,     # -> auto-download from PSMSL
+  save             = TRUE, save_dir = "results/FRA"
+)
+
+dry <- drought_component(
+  country_abbrev          = "FRA",
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  mask_path               = "data/era5/FRA/mask_FRA.nc",
+  reference_period        = c("2011-01-01", "2013-12-31"),
+  study_period            = c("2011-01-01", "2015-12-31"),
+  area                    = FALSE, admin_level = NULL,
+  save                    = FALSE, load_dir = "results/FRA"
+)
+plot_aci_map(dry, time_index = "mean")
+plot_aci_map(dry, time_index = 60)
+animate_aci_map(dry, country_abbrev = "FRA",
+                 fps = 2, save_path = "aci_animation.gif")
 ```
 
 > **Note:** `sealevel_component()` is unaffected by `engine` — its primary

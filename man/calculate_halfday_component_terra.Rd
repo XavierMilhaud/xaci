@@ -12,7 +12,8 @@ calculate_halfday_component_terra(
   percentile,
   above_thresholds,
   mask_path = NULL,
-  threshold = 0.8
+  threshold = 0.8,
+  cores = 1L
 )
 }
 \arguments{
@@ -35,6 +36,11 @@ reduites (voir note ci-dessous).}
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
 
 \item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
+
+\item{cores}{Passed to \code{calculate_percentiles_terra()}'s own
+\code{cores} (see its performance note) -- the rolling-window percentile
+step is by far the most expensive part of this function. Default
+\code{1} (sequential, identical to previous behaviour).}
 }
 \value{
 Same structure as \code{calculate_halfday_component()}:

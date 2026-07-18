@@ -466,8 +466,10 @@ calculate_aci(
   save                = TRUE,
   save_dir            = "results/FRA",
   computed_components = FALSE,
-  engine              = "terra"          # <- memory-safe loading & reduction
+  engine              = "terra",    # <- memory-safe loading & reduction
+  cores               = 12          # <- transmis a temperature_component_terra()
 )
+
 ```
 
 `engine = "base"` (the default) reproduces the original behaviour exactly;

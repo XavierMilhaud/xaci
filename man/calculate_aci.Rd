@@ -27,7 +27,8 @@ calculate_aci(
   save_dir = paste0("results/", country_abbrev),
   load_dir = paste0("results/", country_abbrev),
   computed_components = FALSE,
-  engine = c("base", "terra")
+  engine = c("base", "terra"),
+  cores = 1L
 )
 }
 \arguments{
@@ -138,6 +139,15 @@ their memory-safe terra-based equivalents (see
 high-resolution historical series (40+ years hourly) that would
 otherwise saturate RAM. \code{sealevel_component()} is unaffected by
 this argument in either case.}
+
+\item{cores}{Positive integer, default \code{1}. Only used when
+\code{engine = "terra"}, and only by \code{temperature_component_terra()}
+(passed through to \code{calculate_percentiles_terra()}'s own
+\code{cores} -- see its performance note: the rolling-window percentile
+step has no built-in parallelism in terra itself, so this is where
+parallelizing across spatial tiles helps most). Silently ignored for
+\code{engine = "base"} and for the other three components, which don't
+have a \code{cores} argument.}
 }
 \value{
 \describe{

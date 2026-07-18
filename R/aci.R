@@ -209,6 +209,14 @@ NULL
 #'   high-resolution historical series (40+ years hourly) that would
 #'   otherwise saturate RAM. \code{sealevel_component()} is unaffected by
 #'   this argument in either case.
+#' @param cores Positive integer, default \code{1}. Only used when
+#'   \code{engine = "terra"}, and only by \code{temperature_component_terra()}
+#'   (passed through to \code{calculate_percentiles_terra()}'s own
+#'   \code{cores} -- see its performance note: the rolling-window percentile
+#'   step has no built-in parallelism in terra itself, so this is where
+#'   parallelizing across spatial tiles helps most). Silently ignored for
+#'   \code{engine = "base"} and for the other three components, which don't
+#'   have a \code{cores} argument.
 #' @return
 #'   \describe{
 #'     \item{National scalar (\code{area = TRUE}, \code{admin_level = NULL})}{
@@ -320,7 +328,8 @@ calculate_aci <- function(country_abbrev,
                           save_dir                = paste0("results/", country_abbrev),
                           load_dir                = paste0("results/", country_abbrev),
                           computed_components     = FALSE,
-                          engine                  = c("base", "terra")) {
+                          engine                  = c("base", "terra"),
+                          cores                   = 1L) {
 
   # engine = "terra" : bascule temperature_component()/wind_component()/
   # drought_component()/precipitation_component() vers leurs equivalents
@@ -329,6 +338,13 @@ calculate_aci <- function(country_abbrev,
   # saturent la RAM avec le chargement ncdf4 classique.
   # sealevel_component() n'est PAS concernee par ce parametre (voir note de
   # suivi dans .resolve_component_functions()).
+  #
+  # cores : uniquement utilise quand engine = "terra", et seulement par
+  # temperature_component_terra() -- transmis a calculate_percentiles_terra(),
+  # dont l'etape de quantile glissant (terra::roll()) est de loin la plus
+  # couteuse du pipeline terra et n'a aucune parallelisation native (voir
+  # ?calculate_percentiles_terra). Ignore silencieusement pour engine = "base"
+  # (temperature_component() de base n'a pas ce parametre).
   engine            <- match.arg(engine)
   component_fns     <- .resolve_component_functions(engine)
   temperature_fun    <- component_fns$temperature
@@ -452,7 +468,7 @@ calculate_aci <- function(country_abbrev,
     )
 
     message(sprintf("Computing temperature T%d component...", percentile_low))
-    comp_t_low <- temperature_fun(
+    t_low_args <- list(
       country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
@@ -466,9 +482,13 @@ calculate_aci <- function(country_abbrev,
       save                  = save,
       save_dir              = save_dir
     )
+    # cores : uniquement transmis pour engine = "terra" -- temperature_component()
+    # (base) n'a pas ce parametre, do.call() erreurait sinon ("unused argument").
+    if (engine == "terra") t_low_args$cores <- cores
+    comp_t_low <- do.call(temperature_fun, t_low_args)
 
     message(sprintf("Computing temperature T%d component...", percentile_high))
-    comp_t_high <- temperature_fun(
+    t_high_args <- list(
       country_abbrev = country_abbrev,
       temperature_data_path = temperature_data_path,
       mask_path             = mask_data_path,
@@ -482,6 +502,8 @@ calculate_aci <- function(country_abbrev,
       save                  = save,
       save_dir              = save_dir
     )
+    if (engine == "terra") t_high_args$cores <- cores
+    comp_t_high <- do.call(temperature_fun, t_high_args)
 
     message("Computing sea-level component...")
     comp_sl <- sealevel_component(

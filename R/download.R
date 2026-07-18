@@ -122,13 +122,13 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
     dest_dir <- file.path("data", "era5", toupper(country_abbrev))
   }
 
-  dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path("data", "era5", toupper(country_abbrev), "source"), recursive = TRUE, showWarnings = FALSE)
 
   yearly_files <- character(length(years))
 
   for (i in seq_along(years)) {
     yr       <- years[i]
-    out_file <- file.path(dest_dir, sprintf("%s_%d.nc", variable, yr))
+    out_file <- file.path(dest_dir, "source", sprintf("%s_%d.nc", variable, yr))
     yearly_files[i] <- out_file
 
     if (file.exists(out_file) && !overwrite) {

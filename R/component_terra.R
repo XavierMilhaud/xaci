@@ -253,10 +253,17 @@ temp_extremum_terra <- function(r, extremum, period, filename = "") {
 #'   \code{terra::time()} set (replaces the \code{dataset} argument of the
 #'   base-R version).
 #' @param filename Optional output path for the final thresholds.
-#' @param cores Positive integer. If \code{cores > 1}, split the raster into
-#'   that many row-wise spatial tiles and process them in parallel worker
-#'   processes (see performance note above). Default \code{1} (sequential,
-#'   identical to previous behaviour).
+#' @param cores Positive integer, treated as a CEILING rather than an exact
+#'   value. If \code{cores > 1}, split the raster into (up to) that many
+#'   row-wise spatial tiles and process them in parallel worker processes
+#'   (see performance note above). Before launching workers, the actual
+#'   count is automatically capped down (with a \code{message()}) based on
+#'   the real size of the data to process and the RAM currently available on
+#'   the machine (best effort, see \code{.safe_cores_terra()}) -- this is an
+#'   approximate safety net against out-of-memory crashes, not a guarantee;
+#'   pass a smaller \code{cores} yourself if you still run into trouble.
+#'   Default \code{1} (sequential, identical to previous behaviour, no
+#'   memory estimation performed).
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @export
 #' @importFrom terra time roll tapp
@@ -378,7 +385,127 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   terra::rast(layers)
 }
 
-#' Tiled/parallel percentile computation
+#' Detect available system memory, in GB (best effort, cross-platform)
+#'
+#' Reads OS-specific sources (\code{/proc/meminfo} on Linux, \code{vm_stat}
+#' on macOS, \code{wmic} on Windows). Returns \code{NA_real_} if detection
+#' fails for any reason (unsupported OS, restricted/sandboxed environment,
+#' parsing failure, etc.) -- callers must handle that case explicitly rather
+#' than assume a numeric result.
+#'
+#' @return A single numeric (GB), or \code{NA_real_} if undetectable.
+#' @noRd
+.detect_available_memory_gb <- function() {
+  os <- Sys.info()[["sysname"]]
+  tryCatch({
+    if (identical(os, "Linux")) {
+      meminfo <- readLines("/proc/meminfo")
+      line <- grep("^MemAvailable:", meminfo, value = TRUE)
+      if (length(line) == 0) line <- grep("^MemFree:", meminfo, value = TRUE)
+      kb <- as.numeric(regmatches(line, regexpr("[0-9]+", line)))
+      if (length(kb) != 1 || !is.finite(kb)) return(NA_real_)
+      kb / 1024^2
+    } else if (identical(os, "Darwin")) {
+      page_size <- suppressWarnings(as.numeric(system("sysctl -n hw.pagesize", intern = TRUE)))
+      vm <- system("vm_stat", intern = TRUE)
+      get_pages <- function(pattern) {
+        line <- grep(pattern, vm, value = TRUE)
+        if (length(line) == 0) return(NA_real_)
+        suppressWarnings(as.numeric(gsub("[^0-9]", "", line)))
+      }
+      free_pages     <- get_pages("Pages free:")
+      inactive_pages <- get_pages("Pages inactive:")
+      if (!is.finite(page_size) || !is.finite(free_pages) || !is.finite(inactive_pages)) {
+        return(NA_real_)
+      }
+      (free_pages + inactive_pages) * page_size / 1024^3
+    } else if (identical(os, "Windows")) {
+      out <- system("wmic OS get FreePhysicalMemory /value", intern = TRUE)
+      line <- grep("FreePhysicalMemory", out, value = TRUE)
+      kb <- suppressWarnings(as.numeric(gsub("[^0-9]", "", line)))
+      if (length(kb) != 1 || !is.finite(kb)) return(NA_real_)
+      kb / 1024^2
+    } else {
+      NA_real_
+    }
+  }, error = function(e) NA_real_,
+  warning = function(w) NA_real_)
+}
+
+#' Cap the requested number of tiles/workers to a memory-safe value
+#'
+#' \strong{Approximate, best-effort safety net} -- not a guarantee. Estimates
+#' peak memory from the ACTUAL size of \code{r_ref} (precise: cells x layers
+#' x 8 bytes), multiplied by a rough per-worker overhead factor (input +
+#' rolled series + the wrapped copy held in the master process while workers
+#' run, plus a fixed R/GDAL startup cost per extra process). Compared against
+#' a conservative FRACTION of detected available RAM (never assumes all of
+#' it is free for this one computation -- other applications, the current R
+#' session's other objects, and the OS itself all need headroom too).
+#'
+#' This can only ever REDUCE \code{cores_requested}, never increase it, and
+#' falls back to the user's request unmodified (with a warning) if available
+#' memory can't be detected on this system.
+#'
+#' @param r_ref SpatRaster, already filtered to day/night hours and
+#'   \code{reference_period} (i.e. exactly what \code{.calculate_percentiles_terra_tiled()}
+#'   is about to tile).
+#' @param cores_requested Integer, what the user asked for.
+#' @return Integer, \code{<= cores_requested}.
+#' @noRd
+.safe_cores_terra <- function(r_ref, cores_requested) {
+  if (cores_requested <= 1L) return(1L)
+
+  avail_gb <- .detect_available_memory_gb()
+  if (is.na(avail_gb)) {
+    warning(
+      "[calculate_percentiles_terra] Impossible de detecter la RAM disponible ",
+      "sur ce systeme -- 'cores' n'est pas ajuste automatiquement (utilise tel ",
+      "quel : ", cores_requested, "). Si vous rencontrez des plantages memoire ",
+      "(RStudio qui se ferme, \"error reading from connection\"), reduisez ",
+      "'cores' manuellement.",
+      call. = FALSE
+    )
+    return(as.integer(cores_requested))
+  }
+
+  gb_per_copy <- (as.numeric(terra::ncell(r_ref)) * terra::nlyr(r_ref) * 8) / 1024^3
+
+  # Constantes approximatives (voir la documentation de la fonction) :
+  # - budget_frac : ne jamais compter sur PLUS de la moitie de la RAM
+  #   "disponible" pour ce seul calcul (marge pour RStudio, l'OS, le reste
+  #   de la session R en cours, etc.)
+  # - per_worker_multiplier : donnees d'entree + serie roulee (meme taille)
+  #   + la copie wrappee retenue cote maitre pendant l'envoi aux workers
+  # - process_overhead_gb : cout fixe (R + GDAL) par processus worker
+  budget_frac          <- 0.5
+  per_worker_multiplier <- 3
+  process_overhead_gb  <- 0.4
+
+  budget_gb  <- avail_gb * budget_frac
+  safe_cores <- floor((budget_gb) / (gb_per_copy * per_worker_multiplier / cores_requested + process_overhead_gb))
+  # gb_per_copy est la taille de la grille COMPLETE (avant decoupage) ; le
+  # cout "donnees" par worker diminue avec le nombre de tuiles (chacune ne
+  # porte qu'une fraction spatiale), d'ou la division par cores_requested
+  # ci-dessus -- seul le cout fixe process_overhead_gb reste constant par
+  # worker, quel que soit le nombre de tuiles.
+
+  safe_cores <- max(1L, min(as.integer(cores_requested), as.integer(safe_cores)))
+
+  if (safe_cores < cores_requested) {
+    message(sprintf(
+      paste0("[calculate_percentiles_terra] cores demande = %d, reduit a %d ",
+             "d'apres la RAM disponible estimee (%.1f Go) et la taille des ",
+             "donnees a traiter (%.2f Go/copie). Forcez 'cores' explicitement ",
+             "pour outrepasser cette estimation (approximative)."),
+      cores_requested, safe_cores, avail_gb, gb_per_copy
+    ))
+  }
+
+  safe_cores
+}
+
+
 #'
 #' Splits \code{r_ref} into \code{cores} contiguous, non-overlapping row-wise
 #' spatial tiles, processes each tile in a separate worker process (via
@@ -401,6 +528,13 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @noRd
 .calculate_percentiles_terra_tiled <- function(r_ref, n, window_size, cores) {
+  cores <- .safe_cores_terra(r_ref, cores)
+  if (cores <= 1L) {
+    # L'ajustement de securite (RAM disponible) a ramene a 1 coeur : inutile
+    # de payer le cout d'un cluster PSOCK pour un seul worker.
+    return(.calculate_percentiles_terra_core(r_ref, n, window_size, cores_tapp = 1L))
+  }
+
   nr      <- terra::nrow(r_ref)
   n_tiles <- max(1L, min(as.integer(cores), nr))
 

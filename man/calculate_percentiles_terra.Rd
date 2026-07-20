@@ -26,10 +26,17 @@ base-R version).}
 
 \item{filename}{Optional output path for the final thresholds.}
 
-\item{cores}{Positive integer. If \code{cores > 1}, split the raster into
-that many row-wise spatial tiles and process them in parallel worker
-processes (see performance note above). Default \code{1} (sequential,
-identical to previous behaviour).}
+\item{cores}{Positive integer, treated as a CEILING rather than an exact
+value. If \code{cores > 1}, split the raster into (up to) that many
+row-wise spatial tiles and process them in parallel worker processes
+(see performance note above). Before launching workers, the actual
+count is automatically capped down (with a \code{message()}) based on
+the real size of the data to process and the RAM currently available on
+the machine (best effort, see \code{.safe_cores_terra()}) -- this is an
+approximate safety net against out-of-memory crashes, not a guarantee;
+pass a smaller \code{cores} yourself if you still run into trouble.
+Default \code{1} (sequential, identical to previous behaviour, no
+memory estimation performed).}
 }
 \value{
 A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).

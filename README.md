@@ -469,7 +469,6 @@ calculate_aci(
   engine              = "terra",    # <- memory-safe loading & reduction
   cores               = 12          # <- transmis a temperature_component_terra()
 )
-
 ```
 
 `engine = "base"` (the default) reproduces the original behaviour exactly;
@@ -495,22 +494,22 @@ temperature_component_terra(
   country_abbrev        = "FRA",
   temperature_data_path  = "data/era5/FRA/t2m_2010_2020.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
-  reference_period       = c("2010-01-01", "2015-12-31"),
-  study_period           = c("2010-01-01", "2020-12-31"),
+  reference_period       = c("2000-01-01", "2012-12-31"),
+  study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 10, extremum = "min", above_thresholds = FALSE,
   area = FALSE, admin_level = NULL,
-  cores = 12, save = TRUE, save_dir = "results/FRA"
+  cores = 2, save = TRUE, save_dir = "results/FRA"
 )
 
 temperature_component_terra(
   country_abbrev        = "FRA",
   temperature_data_path  = "data/era5/FRA/t2m_2000_2024.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
-  reference_period       = c("2000-01-01", "2010-12-31"),
+  reference_period       = c("2000-01-01", "2012-12-31"),
   study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
-  save = TRUE, save_dir = "results/FRA"
+  cores = 8, save = TRUE, save_dir = "results/FRA"
 )
 
 sealevel_component(

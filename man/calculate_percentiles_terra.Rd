@@ -26,17 +26,16 @@ base-R version).}
 
 \item{filename}{Optional output path for the final thresholds.}
 
-\item{cores}{Positive integer, treated as a CEILING rather than an exact
-value. If \code{cores > 1}, split the raster into (up to) that many
-row-wise spatial tiles and process them in parallel worker processes
-(see performance note above). Before launching workers, the actual
-count is automatically capped down (with a \code{message()}) based on
-the real size of the data to process and the RAM currently available on
-the machine (best effort, see \code{.safe_cores_terra()}) -- this is an
-approximate safety net against out-of-memory crashes, not a guarantee;
-pass a smaller \code{cores} yourself if you still run into trouble.
-Default \code{1} (sequential, identical to previous behaviour, no
-memory estimation performed).}
+\item{cores}{How many spatial tiles to process IN PARALLEL (a ceiling,
+further capped by \code{.safe_cores_terra()} based on RAM available and
+a single tile's size). Default \code{1} (sequential -- tiles are still
+used for memory safety even at \code{cores = 1}, just processed one
+after another instead of concurrently; see performance note above).
+\strong{Note:} the NUMBER of tiles is decided independently of
+\code{cores}, purely to keep a single \code{terra::roll()} call's memory
+footprint bounded (see \code{.calculate_percentiles_terra_tiled()}) --
+\code{cores} only controls how many of those (already memory-safe)
+tiles run at once.}
 }
 \value{
 A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
@@ -50,17 +49,23 @@ terra versions -- check \code{?terra::roll} against your installed version
 running on the full 40-year series.
 }
 \details{
-\strong{Performance note:} the rolling-window quantile
+\strong{Performance AND memory note:} the rolling-window quantile
 (\code{terra::roll()}) is by far the most expensive step of the whole
 \code{*_terra} pipeline -- it invokes a custom R callback
 (\code{stats::quantile()}) at every timestep of \code{reference_period}
-(filtered to day/night hours), for every cell. Unlike \code{terra::tapp()},
-\code{terra::roll()} has no built-in \code{cores} argument in the terra
-version this package was tested against (1.7.65) -- there is no GPU path
-either (neither terra/GDAL nor base R ship a GPU rolling-quantile
-primitive). Set \code{cores > 1} to work around this: the raster is split
-into \code{cores} row-wise spatial tiles (independent computation, no
-cross-tile dependency, so this cannot change the result), each processed
-in a separate worker process via \code{parallel::makeCluster()}, and the
-366-layer outputs are merged back together.
+(filtered to day/night hours), for every cell. \strong{Crucially, a
+single \code{terra::roll()} call over a whole country's grid can crash R
+from memory pressure alone, with NO parallelism involved} -- observed
+empirically even with \code{cores = 1} on a 16GB machine, for a France-wide
+grid with 13 years of reference data filtered to daytime hours
+(\code{window_size = 80}). Because of this, the raster is now ALWAYS
+split into small spatial tiles sized to a conservative, fixed memory
+target (see \code{target_tile_gb} in
+\code{.calculate_percentiles_terra_tiled()}), regardless of \code{cores}
+-- \code{cores} only controls how many of those already-memory-safe tiles
+run concurrently (default \code{1}: one at a time). Unlike
+\code{terra::tapp()}, \code{terra::roll()} has no built-in \code{cores}
+argument in the terra version this package was tested against (1.7.65) --
+there is no GPU path either (neither terra/GDAL nor base R ship a GPU
+rolling-quantile primitive).
 }

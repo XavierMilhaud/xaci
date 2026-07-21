@@ -509,7 +509,7 @@ temperature_component_terra(
   study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
-  cores = 8, save = TRUE, save_dir = "results/FRA"
+  cores = 1, save = TRUE, save_dir = "results/FRA"
 )
 
 sealevel_component(
@@ -532,10 +532,25 @@ dry <- drought_component(
   area                    = FALSE, admin_level = NULL,
   save                    = FALSE, load_dir = "results/FRA"
 )
+
 plot_aci_map(dry, time_index = "mean")
 plot_aci_map(dry, time_index = 60)
 animate_aci_map(dry, country_abbrev = "FRA",
                  fps = 2, save_path = "aci_animation.gif")
+                 
+FrACI <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2000-01-01", "2024-12-31"),
+  reference_period    = c("2000-01-01", "2012-12-31"),
+  years               = 2000:2024,
+  granularity         = "month",
+  area                = TRUE,
+  factor              = 1 / 5,
+  admin_level         = NULL,
+  save                = FALSE,
+  computed_components = TRUE,
+  load_dir            = "results/FRA"
+)
 ```
 
 > **Note:** `sealevel_component()` is unaffected by `engine` — its primary

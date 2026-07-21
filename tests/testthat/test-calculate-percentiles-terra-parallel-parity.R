@@ -79,3 +79,52 @@ test_that("calculate_percentiles_terra(cores > 1) fonctionne avec plus de tuiles
   )
   expect_equal(terra::nlyr(out_tiled), 366L)
 })
+
+test_that(".calculate_percentiles_terra_tiled : cores=1 avec decoupage force donne le meme resultat qu'1 seule tuile", {
+  skip_if_not_installed("terra")
+  skip_on_cran()
+
+  # Regression cible : cores<=1 court-circuitait AUPARAVANT tout decoupage
+  # en tuiles (appel direct a .calculate_percentiles_terra_core sur la
+  # grille entiere), alors que le decoupage sert D'ABORD a plafonner la
+  # memoire d'UN SEUL appel terra::roll() -- constate plantant sur une
+  # grille France entiere / 13 ans de reference / heures de jour, MEME SANS
+  # aucune parallelisation. Ce test force un decoupage en plusieurs tuiles
+  # (target_tile_gb tres petit) tout en restant sequentiel (cores = 1), et
+  # verifie que le resultat est identique a un traitement en 1 seule tuile.
+  nlo <- 4; nla <- 6
+  time_vec <- seq(as.POSIXct("2000-01-01 00:00", tz = "UTC"),
+                  as.POSIXct("2001-06-30 23:00", tz = "UTC"), by = "hour")
+  nt <- length(time_vec)
+  ncell <- nlo * nla
+
+  set.seed(42)
+  cell_offset <- rnorm(ncell, sd = 3)
+  vals_matrix <- matrix(NA_real_, nrow = ncell, ncol = nt)
+  for (c in seq_len(ncell)) {
+    vals_matrix[c, ] <- 280 + cell_offset[c] + 5 * sin(seq_len(nt) / (24 * 30)) +
+      rnorm(nt, sd = 2)
+  }
+
+  r <- terra::rast(nrows = nla, ncols = nlo, nlyrs = nt,
+                   xmin = 0, xmax = nlo, ymin = 0, ymax = nla)
+  terra::values(r) <- vals_matrix
+  terra::time(r) <- time_vec
+
+  reference_period <- c("2000-01-01", "2001-06-30")
+  hours <- as.integer(format(terra::time(r), "%H"))
+  keep  <- hours %in% 6:21
+  r_sub <- r[[keep]]
+  ref_mask <- terra::time(r_sub) >= as.POSIXct(reference_period[1], tz = "UTC") &
+    terra::time(r_sub) <= as.POSIXct(reference_period[2], tz = "UTC")
+  r_ref <- r_sub[[ref_mask]]
+  total_gb <- as.numeric(terra::ncell(r_ref)) * terra::nlyr(r_ref) * 8 / 1024^3
+
+  out_1tile <- xaci:::.calculate_percentiles_terra_tiled(r_ref, 90, 80L, cores = 1L,
+                                                         target_tile_gb = 10)
+  out_3tiles_seq <- xaci:::.calculate_percentiles_terra_tiled(r_ref, 90, 80L, cores = 1L,
+                                                              target_tile_gb = total_gb / 3)
+
+  expect_equal(terra::as.array(out_1tile), terra::as.array(out_3tiles_seq),
+               tolerance = 1e-10)
+})

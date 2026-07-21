@@ -234,36 +234,41 @@ temp_extremum_terra <- function(r, extremum, period, filename = "") {
 #' (\code{packageVersion("terra")}) and validate on a small subset before
 #' running on the full 40-year series.
 #'
-#' \strong{Performance note:} the rolling-window quantile
+#' \strong{Performance AND memory note:} the rolling-window quantile
 #' (\code{terra::roll()}) is by far the most expensive step of the whole
 #' \code{*_terra} pipeline -- it invokes a custom R callback
 #' (\code{stats::quantile()}) at every timestep of \code{reference_period}
-#' (filtered to day/night hours), for every cell. Unlike \code{terra::tapp()},
-#' \code{terra::roll()} has no built-in \code{cores} argument in the terra
-#' version this package was tested against (1.7.65) -- there is no GPU path
-#' either (neither terra/GDAL nor base R ship a GPU rolling-quantile
-#' primitive). Set \code{cores > 1} to work around this: the raster is split
-#' into \code{cores} row-wise spatial tiles (independent computation, no
-#' cross-tile dependency, so this cannot change the result), each processed
-#' in a separate worker process via \code{parallel::makeCluster()}, and the
-#' 366-layer outputs are merged back together.
+#' (filtered to day/night hours), for every cell. \strong{Crucially, a
+#' single \code{terra::roll()} call over a whole country's grid can crash R
+#' from memory pressure alone, with NO parallelism involved} -- observed
+#' empirically even with \code{cores = 1} on a 16GB machine, for a France-wide
+#' grid with 13 years of reference data filtered to daytime hours
+#' (\code{window_size = 80}). Because of this, the raster is now ALWAYS
+#' split into small spatial tiles sized to a conservative, fixed memory
+#' target (see \code{target_tile_gb} in
+#' \code{.calculate_percentiles_terra_tiled()}), regardless of \code{cores}
+#' -- \code{cores} only controls how many of those already-memory-safe tiles
+#' run concurrently (default \code{1}: one at a time). Unlike
+#' \code{terra::tapp()}, \code{terra::roll()} has no built-in \code{cores}
+#' argument in the terra version this package was tested against (1.7.65) --
+#' there is no GPU path either (neither terra/GDAL nor base R ship a GPU
+#' rolling-quantile primitive).
 #'
 #' @inheritParams calculate_percentiles
 #' @param r A \code{terra::SpatRaster}, hourly resolution, with
 #'   \code{terra::time()} set (replaces the \code{dataset} argument of the
 #'   base-R version).
 #' @param filename Optional output path for the final thresholds.
-#' @param cores Positive integer, treated as a CEILING rather than an exact
-#'   value. If \code{cores > 1}, split the raster into (up to) that many
-#'   row-wise spatial tiles and process them in parallel worker processes
-#'   (see performance note above). Before launching workers, the actual
-#'   count is automatically capped down (with a \code{message()}) based on
-#'   the real size of the data to process and the RAM currently available on
-#'   the machine (best effort, see \code{.safe_cores_terra()}) -- this is an
-#'   approximate safety net against out-of-memory crashes, not a guarantee;
-#'   pass a smaller \code{cores} yourself if you still run into trouble.
-#'   Default \code{1} (sequential, identical to previous behaviour, no
-#'   memory estimation performed).
+#' @param cores How many spatial tiles to process IN PARALLEL (a ceiling,
+#'   further capped by \code{.safe_cores_terra()} based on RAM available and
+#'   a single tile's size). Default \code{1} (sequential -- tiles are still
+#'   used for memory safety even at \code{cores = 1}, just processed one
+#'   after another instead of concurrently; see performance note above).
+#'   \strong{Note:} the NUMBER of tiles is decided independently of
+#'   \code{cores}, purely to keep a single \code{terra::roll()} call's memory
+#'   footprint bounded (see \code{.calculate_percentiles_terra_tiled()}) --
+#'   \code{cores} only controls how many of those (already memory-safe)
+#'   tiles run at once.
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @export
 #' @importFrom terra time roll tapp
@@ -286,11 +291,12 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   ref_mask  <- terra::time(r_sub) >= ref_start & terra::time(r_sub) <= ref_end
   r_ref     <- r_sub[[ref_mask]]
 
-  out_full <- if (cores <= 1L) {
-    .calculate_percentiles_terra_core(r_ref, n, window_size, cores_tapp = 1L)
-  } else {
-    .calculate_percentiles_terra_tiled(r_ref, n, window_size, cores)
-  }
+  # Toujours passer par .calculate_percentiles_terra_tiled() : le decoupage
+  # en tuiles protege la memoire INDEPENDAMMENT de cores (voir sa doc) --
+  # cores = 1 ne doit PAS court-circuiter ce decoupage, sous peine de
+  # retomber sur un seul appel terra::roll() geant sur la grille entiere
+  # (constate plantant empiriquement, meme sans aucune parallelisation).
+  out_full <- .calculate_percentiles_terra_tiled(r_ref, n, window_size, cores)
 
   if (nzchar(filename)) terra::writeRaster(out_full, filename, overwrite = TRUE)
   out_full
@@ -507,36 +513,67 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 
 
 #'
-#' Splits \code{r_ref} into \code{cores} contiguous, non-overlapping row-wise
-#' spatial tiles, processes each tile in a separate worker process (via
-#' \code{.calculate_percentiles_terra_core()} -- the exact same sequential
-#' logic, so results are identical to the non-tiled path), and merges the
+#' \strong{Le decoupage en tuiles n'est PAS uniquement un mecanisme de
+#' parallelisation.} Il sert d'abord a plafonner la memoire d'UN SEUL appel
+#' \code{terra::roll()} -- constate empiriquement insuffisant a lui seul avec
+#' \code{cores = 1} (aucun decoupage) sur une grille France entiere avec 13
+#' ans de reference filtres sur les heures de jour : \code{terra::roll()}
+#' peut faire planter R/RStudio meme SANS aucune parallelisation, la ou
+#' \code{cores > 1} donnait l'illusion que le probleme etait le nombre de
+#' processus. Le nombre de tuiles est donc calcule a partir d'une cible de
+#' taille memoire FIXE et conservatrice par tuile (\code{target_tile_gb}),
+#' independamment de \code{cores} -- \code{cores} ne controle QUE combien de
+#' ces tuiles, deja necessaires pour la memoire, sont traitees EN PARALLELE
+#' (\code{cores = 1} reste securise : il traite les memes petites tuiles,
+#' juste les unes apres les autres au lieu de simultanement).
+#'
+#' Splits \code{r_ref} into contiguous, non-overlapping row-wise spatial
+#' tiles, processes each tile (via \code{.calculate_percentiles_terra_core()}
+#' -- the exact same sequential logic, so results are identical to the
+#' non-tiled path, whether run sequentially or in parallel), and merges the
 #' resulting 366-layer tiles back into a single full-extent SpatRaster.
 #'
 #' The rolling-window quantile (\code{terra::roll()}) is purely a per-cell,
 #' independent-in-space computation (no cross-cell dependency), so splitting
 #' the grid spatially and recombining afterwards cannot change the result --
-#' only how the work is distributed across processes.
+#' only how (and in how many pieces) the work gets done.
 #'
 #' SpatRaster objects hold external C++ pointers that cannot be sent as-is to
 #' another R process; \code{terra::wrap()}/\code{terra::unwrap()} are used to
 #' (de)serialize tiles across the cluster, as recommended by the terra
-#' documentation for parallel use.
+#' documentation for parallel use -- only needed when actually parallelizing
+#' (\code{n_workers > 1}); the sequential path avoids that overhead entirely.
 #'
 #' @inheritParams .calculate_percentiles_terra_core
-#' @param cores Number of tiles/worker processes.
+#' @param cores Requested number of parallel workers (ceiling, further capped
+#'   by \code{.safe_cores_terra()} using a single tile's size, not the whole
+#'   grid's).
+#' @param target_tile_gb Target raw data size (GB) per tile, used to decide
+#'   how many tiles are needed for memory safety, REGARDLESS of \code{cores}.
+#'   Conservative default \code{0.15} -- deliberately small: a single ~1.5GB
+#'   tile (i.e. no tiling at all) was observed to crash R on a 16GB machine
+#'   for the "day" part of \code{temperature_component_terra()} (percentile
+#'   90/above_thresholds), where \code{window_size = 80} makes
+#'   \code{terra::roll()}'s actual peak memory well above what raw data size
+#'   alone would suggest. Lower this further if you still see crashes; raise
+#'   it (fewer, larger tiles) only if you have headroom to spare and want
+#'   fewer, faster per-tile calls.
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @noRd
-.calculate_percentiles_terra_tiled <- function(r_ref, n, window_size, cores) {
-  cores <- .safe_cores_terra(r_ref, cores)
-  if (cores <= 1L) {
-    # L'ajustement de securite (RAM disponible) a ramene a 1 coeur : inutile
-    # de payer le cout d'un cluster PSOCK pour un seul worker.
+.calculate_percentiles_terra_tiled <- function(r_ref, n, window_size, cores,
+                                               target_tile_gb = 0.15) {
+  nr <- terra::nrow(r_ref)
+
+  total_gb    <- (as.numeric(terra::ncell(r_ref)) * terra::nlyr(r_ref) * 8) / 1024^3
+  n_tiles_mem <- max(1L, ceiling(total_gb / target_tile_gb))
+  # Au moins autant de tuiles que de coeurs demandes (sinon certains workers
+  # n'auraient rien a faire), mais jamais plus de lignes que la grille n'en a.
+  n_tiles <- min(max(n_tiles_mem, as.integer(cores)), nr)
+  n_tiles <- max(1L, n_tiles)
+
+  if (n_tiles == 1L) {
     return(.calculate_percentiles_terra_core(r_ref, n, window_size, cores_tapp = 1L))
   }
-
-  nr      <- terra::nrow(r_ref)
-  n_tiles <- max(1L, min(as.integer(cores), nr))
 
   row_breaks <- floor(seq(0, nr, length.out = n_tiles + 1L))
   yres <- terra::yres(r_ref)
@@ -555,47 +592,69 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
     tiles[[t]] <- terra::crop(r_ref, e)
   }
 
-  wrapped_tiles <- lapply(tiles, terra::wrap)
+  message(sprintf(
+    "[calculate_percentiles_terra] %d tuile(s) spatiale(s) (~%.2f Go/tuile), pour plafonner le pic memoire.",
+    n_tiles, total_gb / n_tiles
+  ))
 
-  # PSOCK inconditionnellement (pas seulement sous Windows) : GDAL/terra n'est
-  # PAS fork-safe -- son etat interne C++ (connexions GDAL, etc.) peut se
-  # corrompre apres un fork(), y compris sous Linux/macOS. Verifie
-  # empiriquement dans ce package : un cluster FORK plante silencieusement
-  # ("Killed") sur des objets terra la ou PSOCK fonctionne de facon fiable.
-  cl <- parallel::makeCluster(n_tiles, type = "PSOCK")
-  on.exit(parallel::stopCluster(cl), add = TRUE)
-  parallel::clusterEvalQ(cl, { library(terra) })
+  # Nombre de WORKERS paralleles : plafonne par cores, par le nombre de
+  # tuiles (inutile d'ouvrir plus de workers que de taches), ET par la RAM
+  # disponible estimee a partir de la taille d'UNE SEULE tuile (et non plus
+  # de la grille entiere comme avant) -- cores=1 saute directement au
+  # traitement sequentiel ci-dessous, sans jamais tenter d'estimation RAM
+  # inutile pour un seul worker.
+  n_workers <- if (as.integer(cores) <= 1L) {
+    1L
+  } else {
+    .safe_cores_terra(tiles[[1]], min(as.integer(cores), n_tiles))
+  }
 
-  # Un cluster PSOCK est un processus R totalement independant, qui ne peut
-  # PAS retrouver le namespace du package via library(xaci) tant que le
-  # package n'est pas formellement installe (ex. sous devtools::load_all()/
-  # devtools::test(), qui NE cree PAS un package "installe" au sens ou un
-  # nouveau processus pourrait le charger). On detache donc explicitement
-  # .calculate_percentiles_terra_core() de l'espace de noms du package en
-  # rattachant sa closure a globalenv() avant de l'envoyer au worker comme
-  # une VALEUR autonome (argument de parLapply, pas une reference "xaci:::").
-  # Ceci est sans danger : la fonction n'appelle que des fonctions
-  # explicitement qualifiees (terra::, stats::), jamais un autre helper
-  # interne du package.
-  core_fun <- .calculate_percentiles_terra_core
-  environment(core_fun) <- globalenv()
+  if (n_workers <= 1L) {
+    # Sequentiel PAR TUILE : le pic memoire ne depend plus que de la taille
+    # d'UNE tuile (target_tile_gb), jamais de la grille entiere -- c'est ce
+    # qui manquait avec l'ancien cores<=1 (qui traitait tout en un seul
+    # appel terra::roll(), sans aucun decoupage).
+    tile_results <- lapply(tiles, function(t) {
+      .calculate_percentiles_terra_core(t, n, window_size, cores_tapp = 1L)
+    })
+  } else {
+    wrapped_tiles <- lapply(tiles, terra::wrap)
 
-  results_wrapped <- parallel::parLapply(
-    cl, wrapped_tiles,
-    function(wt, n, window_size, core_fun) {
-      tile_r <- terra::unwrap(wt)
-      # cores_tapp = 1 : chaque tuile tourne DEJA dans son propre processus
-      # (parallelisme au niveau des tuiles) -- inutile, et risque, d'ouvrir
-      # un SECOND cluster imbrique pour le tapp() interne de cette meme tuile.
-      out <- core_fun(tile_r, n, window_size, cores_tapp = 1L)
-      terra::wrap(out)
-    },
-    n = n, window_size = window_size, core_fun = core_fun
-  )
+    # PSOCK inconditionnellement (pas seulement sous Windows) : GDAL/terra
+    # n'est PAS fork-safe -- son etat interne C++ (connexions GDAL, etc.)
+    # peut se corrompre apres un fork(), y compris sous Linux/macOS. Verifie
+    # empiriquement dans ce package : un cluster FORK plante silencieusement
+    # ("Killed") sur des objets terra la ou PSOCK fonctionne de facon fiable.
+    cl <- parallel::makeCluster(n_workers, type = "PSOCK")
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    parallel::clusterEvalQ(cl, { library(terra) })
 
-  tile_results <- lapply(results_wrapped, terra::unwrap)
+    # Un cluster PSOCK est un processus R totalement independant, qui ne
+    # peut PAS retrouver le namespace du package via library(xaci) tant que
+    # le package n'est pas formellement installe (ex. sous
+    # devtools::load_all()/devtools::test()). On detache donc explicitement
+    # .calculate_percentiles_terra_core() de l'espace de noms du package en
+    # rattachant sa closure a globalenv() avant de l'envoyer au worker comme
+    # une VALEUR autonome. Sans danger : la fonction n'appelle que des
+    # fonctions explicitement qualifiees (terra::, stats::).
+    core_fun <- .calculate_percentiles_terra_core
+    environment(core_fun) <- globalenv()
 
-  if (length(tile_results) == 1L) return(tile_results[[1]])
+    # parLapply gere deja la file d'attente si n_tiles > n_workers (les
+    # tuiles excedentaires sont distribuees aux workers au fur et a mesure
+    # qu'ils se liberent) -- pas besoin de gerer ca a la main.
+    results_wrapped <- parallel::parLapply(
+      cl, wrapped_tiles,
+      function(wt, n, window_size, core_fun) {
+        tile_r <- terra::unwrap(wt)
+        out <- core_fun(tile_r, n, window_size, cores_tapp = 1L)
+        terra::wrap(out)
+      },
+      n = n, window_size = window_size, core_fun = core_fun
+    )
+    tile_results <- lapply(results_wrapped, terra::unwrap)
+  }
+
   do.call(terra::merge, tile_results)
 }
 

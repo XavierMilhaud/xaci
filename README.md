@@ -492,13 +492,13 @@ exactly like its base-R counterpart (same arguments, same
 ```r
 temperature_component_terra(
   country_abbrev        = "FRA",
-  temperature_data_path  = "data/era5/FRA/t2m_2010_2020.nc",
+  temperature_data_path  = "data/era5/FRA/t2m_2000_2024.nc",
   mask_path              = "data/era5/FRA/mask_FRA.nc",
   reference_period       = c("2000-01-01", "2012-12-31"),
   study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 10, extremum = "min", above_thresholds = FALSE,
   area = FALSE, admin_level = NULL,
-  cores = 2, save = TRUE, save_dir = "results/FRA"
+  cores = 12, save = TRUE, save_dir = "results/FRA"
 )
 
 temperature_component_terra(
@@ -509,7 +509,7 @@ temperature_component_terra(
   study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
-  cores = 2, save = TRUE, save_dir = "results/FRA"
+  cores = 12, save = TRUE, save_dir = "results/FRA"
 )
 
 sealevel_component(
@@ -537,8 +537,9 @@ plot_aci_map(dry, time_index = "mean")
 plot_aci_map(dry, time_index = 60)
 animate_aci_map(dry, country_abbrev = "FRA",
                  fps = 2, save_path = "aci_animation.gif")
+
                  
-FrACI <- calculate_aci(
+faci_monthly_national <- calculate_aci(
   country_abbrev      = "FRA",
   study_period        = c("2000-01-01", "2024-12-31"),
   reference_period    = c("2000-01-01", "2012-12-31"),
@@ -551,6 +552,79 @@ FrACI <- calculate_aci(
   computed_components = TRUE,
   load_dir            = "results/FRA"
 )
+plot_aci_timeseries(faci_monthly_national, smooth = TRUE, span = 0.2, fill_area = TRUE)
+plot_aci_components(faci_monthly_national, type = "bar")
+plot_aci_components(faci_monthly_national, type = "stacked", components = "sealevel")
+plot_aci_components(faci_monthly_national, type = "stacked", components = "t90")
+plot_aci_distribution(faci_monthly_national, type = "violin")
+plot_aci_distribution(faci_monthly_national, type = "boxplot", components = "t90", include_aci = TRUE)
+
+faci_monthly_gridCell <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2000-01-01", "2024-12-31"),
+  reference_period    = c("2000-01-01", "2012-12-31"),
+  years               = 2000:2024,
+  granularity         = "month",
+  area                = FALSE,
+  factor              = 1 / 5,
+  admin_level         = NULL,
+  save                = FALSE,
+  computed_components = TRUE,
+  load_dir            = "results/FRA"
+)
+class(faci_monthly_gridCell)
+attributes(faci_monthly_gridCell)
+faci_monthly_gridCell$time
+faci_monthly_gridCell$lon
+faci_monthly_gridCell$lat
+class(faci_monthly_gridCell$t90)
+class(faci_monthly_gridCell$ACI)
+dim(faci_monthly_gridCell$ACI)
+
+# Grid-cell / raster map (mean over the whole period, or a single time slice):
+plot_aci_map(faci_monthly_gridCell, variable = "ACI", time_index = "mean",
+             var_label = "ACI", title = "Mean ACI, France")
+plot_aci_map(faci_monthly_gridCell$ACI, time_index = "mean")   # bare array also works
+plot_aci_map(faci_monthly_gridCell, variable = "t90", time_index = 300)
+plot_aci_map(faci_monthly_gridCell, variable = "ACI", time_index = 300)
+animate_aci_map(faci_monthly_gridCell, variable = "ACI")
+
+faci_monthly_regional <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2000-01-01", "2024-12-31"),
+  reference_period    = c("2000-01-01", "2012-12-31"),
+  years               = 2000:2024,
+  granularity         = "month",
+  area                = FALSE,
+  factor              = 1 / 5,
+  admin_level         = 1,
+  save                = FALSE,
+  computed_components = TRUE,
+  load_dir            = "results/FRA"
+)
+class(faci_monthly_regional)
+dim(faci_monthly_regional)     # ncol = 6 variables + ACI (7 * 13 regions)
+head(faci_monthly_regional, n=3)
+plot_aci_map(faci_monthly_regional, variable = "ACI", time_index = 300)
+
+faci_monthly_department <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period        = c("2000-01-01", "2024-12-31"),
+  reference_period    = c("2000-01-01", "2012-12-31"),
+  years               = 2000:2024,
+  granularity         = "month",
+  area                = FALSE,
+  factor              = 1 / 5,
+  admin_level         = 2,
+  save                = FALSE,
+  computed_components = TRUE,
+  load_dir            = "results/FRA"
+)
+class(faci_monthly_department)
+dim(faci_monthly_department)
+head(faci_monthly_department, n=3)
+plot_aci_map(faci_monthly_department, variable = "t90", time_index = 300)
+plot_aci_map(faci_monthly_department, variable = "ACI", time_index = 300)
 ```
 
 > **Note:** `sealevel_component()` is unaffected by `engine` — its primary

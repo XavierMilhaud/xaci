@@ -1,0 +1,234 @@
+---
+title: "Running calculate_aci() End to End"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Running calculate_aci() End to End}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+```{r setup}
+library(xaci)
+```
+
+`calculate_aci()` is the main entry point of the package: it computes all
+six components (see `vignette("xaci-components")`) and combines them into
+the index itself, in a single call. This vignette runs it end to end on the
+same kind of synthetic dataset used elsewhere in this package's vignettes,
+and explains the shape of its output.
+
+## Building the synthetic dataset
+
+```{r}
+build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  ncvar <- ncdf4::ncvar_def(var, unit, list(dim_lon, dim_lat, dim_time),
+                            missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(ncvar))
+  ncdf4::ncvar_put(nc, ncvar, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+build_synthetic_mask <- function(path, lon, lat) {
+  dim_lon <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  var_mask <- ncdf4::ncvar_def("country", "1", list(dim_lon, dim_lat),
+                               missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_mask))
+  ncdf4::ncvar_put(nc, var_mask, matrix(1, length(lon), length(lat)))
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+set.seed(7)
+lon      <- c(-1, 0, 1)
+lat      <- c(43, 44, 45)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2012-12-31 23:00", tz = "UTC"), by = "hour")
+nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))
+t2m_vals <- array(NA_real_, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla))
+  t2m_vals[i, j, ] <- seasonal_t + (i + j) + rnorm(nt, sd = 1.5)
+
+tp_vals <- array(0, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla)) {
+  rain_hours <- rbinom(nt, 1, 0.08)
+  tp_vals[i, j, ] <- rain_hours * rexp(nt, rate = 800)
+}
+
+u10_vals <- array(rnorm(nlo * nla * nt, mean = 3, sd = 4), c(nlo, nla, nt))
+v10_vals <- array(rnorm(nlo * nla * nt, mean = 1, sd = 4), c(nlo, nla, nt))
+
+t2m_file  <- tempfile(fileext = ".nc")
+tp_file   <- tempfile(fileext = ".nc")
+u10_file  <- tempfile(fileext = ".nc")
+v10_file  <- tempfile(fileext = ".nc")
+mask_file <- tempfile(fileext = ".nc")
+
+build_synthetic_nc(t2m_file, "t2m", "K",     lon, lat, time_vec, origin, t2m_vals)
+build_synthetic_nc(tp_file,  "tp",  "m",     lon, lat, time_vec, origin, tp_vals)
+build_synthetic_nc(u10_file, "u10", "m s-1", lon, lat, time_vec, origin, u10_vals)
+build_synthetic_nc(v10_file, "v10", "m s-1", lon, lat, time_vec, origin, v10_vals)
+build_synthetic_mask(mask_file, lon, lat)
+
+month_frac <- c("0417", "125", "2083", "2917", "375", "4583",
+                "5417", "625", "7083", "7917", "875", "9583")
+build_synthetic_psmsl_station <- function(dir, station_id, years,
+                                          base_level, trend_mm_per_year) {
+  lines <- character(0)
+  for (y in years) {
+    for (m in seq_len(12)) {
+      level <- base_level + trend_mm_per_year * (y - years[1]) + rnorm(1, sd = 15)
+      lines <- c(lines, sprintf("%d.%s;%.1f;0;000", y, month_frac[m], level))
+    }
+  }
+  writeLines(lines, file.path(dir, paste0(station_id, ".txt")))
+}
+
+psmsl_dir <- tempfile("psmsl_")
+dir.create(psmsl_dir)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2012, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2012, base_level = 6980, trend_mm_per_year = 4)
+
+reference_period <- c("2011-01-01", "2012-12-31")  # full 2 years: sea-level needs
+                                                    # >= 2 samples/calendar month, see below
+study_period      <- c("2011-01-01", "2012-12-31")
+```
+
+We use `"FRA"` as the `country_abbrev` here (rather than a fictitious code)
+because the sea-level component looks up stations by matching this value
+against the bundled PSMSL metadata's `Country` column — see
+`vignette("xaci-components")` for details.
+
+## Running the pipeline
+
+With explicit `*_data_path` arguments, `calculate_aci()` skips the
+ERA5-path-building step (normally driven by `years`) and goes straight to
+computing every component, then combining them:
+
+```{r, message = FALSE}
+monthly_national_aci <- calculate_aci(
+  country_abbrev           = "FRA",
+  study_period               = study_period,
+  reference_period            = reference_period,
+  temperature_data_path      = t2m_file,
+  precipitation_data_path    = tp_file,
+  wind_u10_data_path          = u10_file,
+  wind_v10_data_path          = v10_file,
+  mask_data_path               = mask_file,
+  sealevel_dir                  = psmsl_dir,
+  granularity                    = "month",
+  area                            = TRUE,
+  factor                          = 1 / 5,
+  admin_level                     = NULL,
+  save                             = FALSE,
+  computed_components              = FALSE
+)
+
+monthly_national_aci
+```
+
+## Reading the output
+
+For national, monthly output, `calculate_aci()` returns a `data.frame` with
+one row per month (`"YYYY-MM"` row names) and one column per component plus
+`ACI` itself:
+
+```{r}
+colnames(monthly_national_aci)
+class(monthly_national_aci)
+```
+
+Each component column is a standardised anomaly (roughly, number of
+standard deviations from the reference-period mean for that calendar
+month); `ACI` is their combination via the formula introduced in
+`vignette("xaci-intro")`.
+
+## Changing granularity without recomputing
+
+Because the underlying grid-cell computation is independent from the
+temporal aggregation step, you can request a different `granularity`
+without paying the cost of recomputing every component — in real usage this
+is best done via the `save` / `computed_components` caching pattern shown in
+`vignette("xaci-components")`; here, for the small synthetic example, we
+simply call `calculate_aci()` again:
+
+```{r, message = FALSE}
+seasonal_national_aci <- calculate_aci(
+  country_abbrev           = "FRA",
+  study_period               = study_period,
+  reference_period            = reference_period,
+  temperature_data_path      = t2m_file,
+  precipitation_data_path    = tp_file,
+  wind_u10_data_path          = u10_file,
+  wind_v10_data_path          = v10_file,
+  mask_data_path               = mask_file,
+  sealevel_dir                  = psmsl_dir,
+  granularity                    = "season",
+  area                            = TRUE
+)
+
+seasonal_national_aci
+```
+
+## Grid-cell mode: output for mapping
+
+Setting `area = FALSE` with `admin_level = NULL` switches to **grid-cell
+mode**: instead of a national scalar per month, you get the full spatial
+field for each component and for `ACI` itself, ready for mapping (see
+`vignette("xaci-visualization")`):
+
+```{r, message = FALSE}
+grid_aci <- calculate_aci(
+  country_abbrev           = "FRA",
+  study_period               = study_period,
+  reference_period            = reference_period,
+  temperature_data_path      = t2m_file,
+  precipitation_data_path    = tp_file,
+  wind_u10_data_path          = u10_file,
+  wind_v10_data_path          = v10_file,
+  mask_data_path               = mask_file,
+  sealevel_dir                  = psmsl_dir,
+  granularity                    = "month",
+  area                            = FALSE,
+  admin_level                     = NULL,
+  max_dist_km                     = 500
+)
+
+names(grid_aci)
+dim(grid_aci$ACI)   # [lon x lat x time]
+```
+
+`grid_aci$lon` / `grid_aci$lat` are the coordinate vectors, `grid_aci$time`
+the (aggregated) time steps, and `grid_aci$ACI`, `grid_aci$t90`, ... are
+`[lon x lat x time]` arrays, each self-sufficient (carrying its own
+`lon`/`lat`/`time`/`country_abbrev` attributes) once extracted from the
+list.
+
+For aggregation at the level of administrative units (e.g. French
+departments) instead of nationally or on the raw grid, see
+`vignette("xaci-admin-levels")`.
+
+```{r, include = FALSE}
+unlink(c(t2m_file, tp_file, u10_file, v10_file, mask_file))
+unlink(psmsl_dir, recursive = TRUE)
+```

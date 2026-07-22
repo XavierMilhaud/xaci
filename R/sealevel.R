@@ -152,7 +152,14 @@ sealevel_compute_monthly_stats <- function(df, reference_period, stats) {
   if (stats == "means") {
     tapply(row_mean, months, mean, na.rm = TRUE)
   } else if (stats == "std") {
-    tapply(row_mean, months, sd, na.rm = TRUE)
+    sd_v <- tapply(row_mean, months, sd, na.rm = TRUE)
+    # Meme garde-fou que standardize_metric() (R/utils.R) : un mois avec un
+    # seul echantillon dans la periode de reference (ex: reference_period
+    # ne couvrant qu'une annee) donne sd() = NA, ce qui propagerait des NA
+    # a TOUTES les lignes standardisees dans sealevel_standardize_data(),
+    # et donc les ferait toutes supprimer (cf. sealevel_standardize_data()).
+    sd_v[is.na(sd_v) | sd_v < .Machine$double.eps] <- 1
+    sd_v
   } else {
     stop("'stats' must be 'means' or 'std'")
   }
@@ -535,10 +542,18 @@ sealevel_component <- function(country_abbrev,
   if (!area) {
     if (is.null(mask_path))
       stop("'mask_path' must be provided when area = FALSE.")
-    grid <- load_component(mask_path, var_name = "country", mask_path = NULL)
+    # NB: on ne peut pas passer par load_component()/load_netcdf() ici : ces
+    # fonctions supposent un cube climatique 3D (lon x lat x time) et lisent
+    # inconditionnellement une variable "time", qui n'existe pas dans le
+    # fichier de masque (2D, lon x lat uniquement -- cf. apply_mask(), qui
+    # le lit deja comme tel). On recupere lon/lat directement.
+    mask_nc <- ncdf4::nc_open(mask_path)
+    grid_lon <- ncdf4::ncvar_get(mask_nc, "longitude")
+    grid_lat <- ncdf4::ncvar_get(mask_nc, "latitude")
+    ncdf4::nc_close(mask_nc)
     return(interpolate_sealevel_to_grid(raw,
-                                        lon         = grid$lon,
-                                        lat         = grid$lat,
+                                        lon         = grid_lon,
+                                        lat         = grid_lat,
                                         max_dist_km = max_dist_km))
   }
 

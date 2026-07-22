@@ -585,7 +585,7 @@ calculate_aci <- function(country_abbrev,
   }
 
   # ------------------------------------------------------------------ #
-  # Mode grid-cell : calcul ACI + agrégation temporelle                 #
+  # Mode grid-cell : calcul ACI + agregation temporelle                 #
   # ------------------------------------------------------------------ #
   if (grid_cell_mode) {
     grid_aci <- .compute_aci_grid(

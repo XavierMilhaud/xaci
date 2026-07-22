@@ -37,5 +37,8 @@ Suggests:
     ecmwfr (>= 2.0.0),
     rnaturalearthdata,
     gganimate,
-    gifski
+    gifski,
+    knitr,
+    rmarkdown
 RoxygenNote: 7.3.3
+VignetteBuilder: knitr

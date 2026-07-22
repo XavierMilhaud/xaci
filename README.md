@@ -509,7 +509,7 @@ temperature_component_terra(
   study_period           = c("2000-01-01", "2024-12-31"),
   percentile = 90, extremum = "max", above_thresholds = TRUE,
   area = FALSE, admin_level = NULL,
-  cores = 1, save = TRUE, save_dir = "results/FRA"
+  cores = 2, save = TRUE, save_dir = "results/FRA"
 )
 
 sealevel_component(

@@ -5,3 +5,6 @@ results/
 *.nc
 *.rds
 .DS_Store
+inst/doc
+/doc/
+/Meta/

@@ -1,0 +1,207 @@
+---
+title: "Administrative-Level Aggregation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Administrative-Level Aggregation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+```{r setup}
+library(xaci)
+```
+
+Besides the national scalar mode (`area = TRUE`) and the grid-cell mode
+(`area = FALSE`, see `vignette("xaci-visualization")`), xaci can aggregate
+components and the ACI itself at the level of **administrative units** —
+e.g. French departments or regions — by passing `admin_level` to
+`calculate_aci()` or to any individual `*_component()` function.
+
+## How it works
+
+Administrative aggregation relies on two pieces of geographic data, both
+fetched over the network the first time they are needed:
+
+* **`build_admin_mask()`** downloads administrative polygons via
+  [GADM](https://gadm.org/) (through the `geodata` package) for the
+  requested `country_abbrev` / `admin_level`, and computes, for every ERA5
+  grid cell, the fraction of its area that falls inside each administrative
+  unit. This is what turns a `[lon x lat x time]` array into one column per
+  administrative unit.
+* **`assign_sealevel_to_admin()`** does the analogous job for the sea-level
+  component: it matches PSMSL tide-gauge stations to the administrative unit
+  they fall in, and computes each unit's coastal fraction (the $\alpha$ in
+  the ACI formula) from a world coastline layer (`rnaturalearth`).
+
+Both of these require network access and are therefore **not run** in this
+vignette. In an interactive session, the call looks like this:
+
+```{r, eval = FALSE}
+admin_mask_L1 <- build_admin_mask(
+  lon = grid_aci$lon, lat = grid_aci$lat,
+  country_abbrev = "FRA", admin_level = 1, crs_metric = 2154   # Lambert-93
+)
+
+dept_assignment <- assign_sealevel_to_admin(
+  country_abbrev = "FRA", admin_level = 1, crs_metric = 2154
+)
+
+dept_aci_FRA <- calculate_aci(
+  country_abbrev      = "FRA",
+  study_period          = c("2011-01-01", "2015-12-31"),
+  reference_period       = c("2011-01-01", "2013-12-31"),
+  years                    = 2011:2015,
+  granularity               = "month",
+  admin_level                = 1,
+  crs_metric                  = 2154,
+  load_dir                     = "results/FRA",
+  computed_components           = TRUE
+)
+
+dim(dept_aci_FRA)   # months x (7 variables x number of departments)
+plot_aci_map(dept_aci_FRA, variable = "ACI", time_index = "mean")
+```
+
+Passing `admin_mask` (and, for sea level, `admin_assignment`) explicitly to
+an individual component avoids rebuilding it on every call — useful when
+computing several components for the same country/level:
+
+```{r, eval = FALSE}
+prec_admin_L1 <- precipitation_component(
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  country_abbrev            = "FRA",
+  reference_period           = c("2011-01-01", "2013-12-31"),
+  study_period                = c("2011-01-01", "2015-12-31"),
+  mask_path                    = "data/era5/FRA/mask_FRA.nc",
+  area                          = FALSE,
+  admin_mask                    = admin_mask_L1,
+  computed_components            = TRUE,
+  load_dir                        = "results/FRA"
+)
+```
+
+## The aggregation mechanics, without the network
+
+The two GADM/`rnaturalearth` downloads above only *produce* two simple data
+structures — an `admin_mask` (area-fraction weights per grid cell per
+administrative unit) and an `admin_assignment` (station-to-unit mapping and
+coastal fractions). Everything downstream of them is ordinary R and can be
+demonstrated with hand-built versions of these structures, exactly as the
+package's own test suite does to keep tests network-free.
+
+### A synthetic two-region country
+
+```{r}
+lon <- c(-1, 0)
+lat <- c(43, 44)
+
+# A minimal admin_mask: 2 grid cells, cell (i, j=1) entirely in region "A",
+# cell (i, j=2) entirely in region "B" (weight 1 -- no partial overlap here,
+# to keep the arithmetic easy to follow).
+synthetic_admin_mask <- list(
+  units   = c("A", "B"),
+  lon     = lon,
+  lat     = lat,
+  weights = list(
+    `1` = c(A = 1, B = 0),   # cell (lon[1], lat[1])
+    `2` = c(A = 0, B = 1),   # cell (lon[1], lat[2])
+    `3` = c(A = 1, B = 0),   # cell (lon[2], lat[1])
+    `4` = c(A = 0, B = 1)    # cell (lon[2], lat[2])
+  )
+)
+```
+
+We reuse a small synthetic temperature component (built as in
+`vignette("xaci-components")`) and aggregate it per region with
+`reduce_dataarray_to_dataframe()` — the same function `calculate_aci()`
+calls internally once `admin_mask` is known:
+
+```{r}
+build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+  set.seed(5)
+  seasonal <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))
+  vals <- array(NA_real_, dim = c(nlo, nla, nt))
+  for (i in seq_len(nlo)) {
+    for (j in seq_len(nla)) {
+      # A clear north/south offset so the two regions differ visibly
+      vals[i, j, ] <- seasonal + 4 * j + rnorm(nt, sd = 1.5)
+    }
+  }
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  var_t2m <- ncdf4::ncvar_def("t2m", "K", list(dim_lon, dim_lat, dim_time),
+                              missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_t2m))
+  ncdf4::ncvar_put(nc, var_t2m, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2011-12-31 23:00", tz = "UTC"), by = "hour")
+t2m_file <- tempfile(fileext = ".nc")
+build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
+
+reference_period <- c("2011-01-01", "2011-12-31")
+
+t90_grid <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev          = "XXX",
+  reference_period         = reference_period,
+  study_period             = reference_period,
+  percentile               = 90, extremum = "max", above_thresholds = TRUE,
+  area                     = FALSE,     # keep the spatial dimension
+  admin_mask                = synthetic_admin_mask
+)
+
+head(t90_grid)
+```
+
+`temperature_component()` returned one column per region directly, because
+we passed `admin_mask` in. Internally, each grid cell is first standardised
+against its *own* reference-period distribution, and only then averaged
+(weighted by area fraction) into region A and region B — so the two columns
+can differ, but only insofar as the two regions' underlying cells behave
+differently, not because of a raw, unstandardised temperature gap between
+them.
+
+### The sea-level equivalent
+
+`assign_sealevel_to_admin()`'s output — `list(station_ids, factors)` — can
+be built by hand the same way, using real PSMSL station IDs (see
+`vignette("xaci-components")` for how to generate synthetic tide-gauge
+`.txt` files for these):
+
+```{r}
+synthetic_admin_assignment <- list(
+  station_ids = list(A = 1, B = 61),      # PSMSL IDs: Brest -> A, Marseille -> B
+  factors     = c(A = 0.6, B = 0.3)       # coastal fraction per region
+)
+```
+
+Passed as `admin_assignment` to `sealevel_component(..., area = TRUE)`, this
+drives `reduce_sealevel_over_region()` to produce one `sealevel_A` /
+`sealevel_B` column instead of a single national series — see
+`?reduce_sealevel_over_region` for the exact aggregation logic, which mirrors
+`reduce_dataarray_to_dataframe()` above but on tide-gauge station data
+instead of a spatial grid.
+
+```{r, include = FALSE}
+unlink(t2m_file)
+```

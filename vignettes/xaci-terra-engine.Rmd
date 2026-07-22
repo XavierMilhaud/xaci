@@ -1,0 +1,179 @@
+---
+title: "Memory-Safe Processing with the terra Engine"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Memory-Safe Processing with the terra Engine}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4
+)
+```
+
+```{r setup}
+library(xaci)
+```
+
+## Why a second engine?
+
+The default pipeline (`temperature_component()`, `wind_component()`,
+`drought_component()`, `precipitation_component()`, all built on
+`load_component()` / `ncdf4`) reads the **entire** hourly NetCDF cube into
+memory before doing any computation. For a single ERA5 variable over a
+whole country, multiple decades, at hourly resolution, this can require
+tens of gigabytes of RAM before any actual work happens.
+
+xaci provides a memory-safe alternative built on the
+[`terra`](https://rspatial.github.io/terra/) package: it reads NetCDF files
+lazily (metadata only, no pixel values loaded up front), reduces hourly data
+to daily resolution block by block, and writes intermediate results to disk
+rather than accumulating them in RAM. Once reduced to daily resolution — a
+few hundred KB to a few MB even for 40+ years of data — the rest of the
+pipeline (percentile thresholds, monthly aggregation, standardisation) is
+identical to the default engine: same functions, same results. This is
+verified in the package's own test suite by a parity test comparing both
+engines on synthetic and NetCDF-backed data.
+
+**Rule of thumb**: use `engine = "base"` (the default) for country-level,
+multi-year studies; switch to `engine = "terra"` when the default pipeline
+runs out of memory, typically a whole-country, hourly, multi-decade
+`study_period`.
+
+## Same inputs, same outputs
+
+Each memory-safe component has a `_terra`-suffixed, drop-in equivalent, used
+exactly like its base-R counterpart (same arguments — plus `cores`, used
+only by the temperature percentile step, see below):
+
+| Base-R function             | `terra` equivalent                |
+|------------------------------|-------------------------------------|
+| `temperature_component()`    | `temperature_component_terra()`     |
+| `wind_component()`           | `wind_component_terra()`            |
+| `drought_component()`        | `drought_component_terra()`         |
+| `precipitation_component()`  | `precipitation_component_terra()`   |
+
+`sealevel_component()` has no `_terra` equivalent: its input is tide-gauge
+CSV data, not gridded NetCDF, so the memory bottleneck this engine addresses
+does not apply to it.
+
+We build the same kind of tiny synthetic NetCDF used elsewhere in this
+package's vignettes, and compute `temperature_component()` both ways to
+show they agree:
+
+```{r}
+build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+  seasonal <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))
+  vals <- array(NA_real_, dim = c(nlo, nla, nt))
+  for (i in seq_len(nlo)) {
+    for (j in seq_len(nla)) {
+      vals[i, j, ] <- seasonal + (i + j) + rnorm(nt, sd = 1.5)
+    }
+  }
+
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  var_t2m <- ncdf4::ncvar_def("t2m", "K", list(dim_lon, dim_lat, dim_time),
+                              missval = NA, prec = "double")
+
+  nc <- ncdf4::nc_create(path, list(var_t2m))
+  ncdf4::ncvar_put(nc, var_t2m, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+set.seed(99)
+lon      <- c(-1, 0)
+lat      <- c(43, 44)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2011-12-31 23:00", tz = "UTC"), by = "hour")
+
+t2m_file <- tempfile(fileext = ".nc")
+build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
+
+reference_period <- c("2011-01-01", "2011-12-31")
+```
+
+```{r}
+t90_base <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev          = "XXX",
+  reference_period         = reference_period,
+  study_period             = reference_period,
+  percentile               = 90, extremum = "max", above_thresholds = TRUE,
+  area                     = TRUE
+)
+
+t90_terra <- temperature_component_terra(
+  temperature_data_path = t2m_file,
+  country_abbrev          = "XXX",
+  reference_period         = reference_period,
+  study_period             = reference_period,
+  percentile               = 90, extremum = "max", above_thresholds = TRUE,
+  area                     = TRUE,
+  cores                    = 1L
+)
+
+all.equal(as.numeric(t90_base), as.numeric(t90_terra), tolerance = 1e-6)
+```
+
+On real, large data the two would differ only in memory footprint and
+runtime, not in the values returned.
+
+## Via `calculate_aci()`
+
+Rather than swapping individual functions, pass `engine = "terra"` to
+`calculate_aci()` directly — everything else about the call stays the same
+(see `vignette("xaci-full-pipeline")` for the base-engine version of this
+call):
+
+```{r, eval = FALSE}
+calculate_aci(
+  country_abbrev      = "FRA",
+  study_period         = c("2000-01-01", "2024-12-31"),
+  reference_period      = c("2000-01-01", "2012-12-31"),
+  years                  = 2000:2024,
+  granularity             = "month",
+  area                     = TRUE,
+  factor                   = 1 / 5,
+  admin_level               = NULL,
+  save                       = TRUE,
+  save_dir                   = "results/FRA",
+  computed_components         = FALSE,
+  engine                       = "terra",   # <- memory-safe loading & reduction
+  cores                         = 12         # <- forwarded to temperature_component_terra()
+)
+```
+
+`engine = "base"` (the default) reproduces the original behaviour exactly.
+Cached `.rds` files are named identically regardless of which engine
+produced them, so a later call with `computed_components = TRUE` reloads
+them the same way either way.
+
+## The `cores` argument
+
+`cores` is only meaningful for `engine = "terra"`, and only affects
+`temperature_component_terra()`: its rolling-percentile step
+(`terra::roll()`, via `calculate_percentiles_terra()`) is by far the most
+expensive part of the terra pipeline and has no native parallelisation, so
+`cores` controls a manual chunked-parallel implementation instead. It is
+silently ignored when `engine = "base"` (the base `temperature_component()`
+has no such parameter, so `calculate_aci()` only forwards `cores` when
+`engine = "terra"`).
+
+```{r, include = FALSE}
+unlink(t2m_file)
+```

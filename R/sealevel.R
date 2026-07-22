@@ -535,8 +535,7 @@ sealevel_component <- function(country_abbrev,
   if (!area) {
     if (is.null(mask_path))
       stop("'mask_path' must be provided when area = FALSE.")
-    grid <- load_component(mask_path, var_name = "lsm", mask_path = NULL)
-    #grid <- load_component("data/era5/FRA/tp_2011_2015.nc", var_name = "tp", mask_path)
+    grid <- load_component(mask_path, var_name = "country", mask_path = NULL)
     return(interpolate_sealevel_to_grid(raw,
                                         lon         = grid$lon,
                                         lat         = grid$lat,

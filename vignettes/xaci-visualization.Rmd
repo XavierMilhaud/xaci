@@ -61,13 +61,18 @@ lon      <- c(-1, 0, 1)
 lat      <- c(43, 44, 45)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
 nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
 
-# A mild warming/drying trend, so 2013 (the one out-of-reference year, see
-# vignette("xaci-components") for why reference_period stops at 2012) shows
+# A mild warming/drying trend, so 2014 (the one out-of-reference year, see
+# vignette("xaci-components") for why reference_period stops at 2013) shows
 # genuine anomalies rather than pure noise -- this is what gives the plots
-# below actual visual structure instead of flat, uninformative series.
+# below actual visual structure instead of flat, uninformative series. Note
+# also that reference_period spans 3 years, not 2: with only 2, every
+# component would standardise to the same +-1/sqrt(2) shape during the
+# reference years (a mathematical identity, see vignette("xaci-components")).
+# 3 years is a build-speed compromise, not a fully realistic reference
+# sample, but is enough to break that shared artifact.
 trend <- seq_len(nt) / nt
 
 seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
@@ -112,11 +117,11 @@ build_synthetic_psmsl_station <- function(dir, station_id, years,
 
 psmsl_dir <- tempfile("psmsl_")
 dir.create(psmsl_dir)
-build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2013, base_level = 7020, trend_mm_per_year = 3)
-build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2013, base_level = 6980, trend_mm_per_year = 4)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2014, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2014, base_level = 6980, trend_mm_per_year = 4)
 
-reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
-study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
+reference_period <- c("2011-01-01", "2013-12-31")  # 3 years
+study_period      <- c("2011-01-01", "2014-12-31")  # 4 years
 ```
 
 We compute a national, monthly ACI series (for the time-series-style plots)

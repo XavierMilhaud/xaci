@@ -28,10 +28,10 @@ synthetic dataset built with the same pattern as `vignette("xaci-intro")`.
 
 ## Building a synthetic ERA5-like extract
 
-We generate three years of hourly data (`t2m`, `tp`, `u10`, `v10`) on a tiny
+We generate four years of hourly data (`t2m`, `tp`, `u10`, `v10`) on a tiny
 3x3 grid, plus a land-mask NetCDF, entirely in memory / temp files — no
-network access required. We use the first two years (2011-2012) as the
-**reference period** and all three years (2011-2013) as the **study
+network access required. We use the first three years (2011-2013) as the
+**reference period** and all four years (2011-2014) as the **study
 period**: this matters for what the standardised output looks like, see the
 note right after the data are generated below.
 
@@ -68,10 +68,10 @@ lon      <- c(-1, 0, 1)
 lat      <- c(43, 44, 45)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
 nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
 
-# A mild warming/drying trend across the series, so that 2013 (the one
+# A mild warming/drying trend across the series, so that 2014 (the one
 # out-of-reference year) shows genuine anomalies rather than pure noise.
 trend <- seq_len(nt) / nt
 
@@ -105,12 +105,12 @@ build_synthetic_nc(u10_file, "u10", "m s-1", lon, lat, time_vec, origin, u10_val
 build_synthetic_nc(v10_file, "v10", "m s-1", lon, lat, time_vec, origin, v10_vals)
 build_synthetic_mask(mask_file, lon, lat)
 
-reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
-study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
+reference_period <- c("2011-01-01", "2013-12-31")  # 3 years
+study_period      <- c("2011-01-01", "2014-12-31")  # 4 years
 country_abbrev    <- "XXX"   # fictitious code for this synthetic example
 ```
 
-Two things worth knowing before reading the output below, both consequences
+Three things worth knowing before reading the output below, all consequences
 of using a small, synthetic reference period rather than the multi-decade
 history you'd have with real data:
 
@@ -119,13 +119,27 @@ history you'd have with real data:
   calendar month; with only 1 year, every month has exactly 1 reference
   sample, an undefined (`NA`) standard deviation, and (for the sea-level
   component specifically) an empty result.
-* **A month that falls *inside* `reference_period` with exactly 2 reference
-  years will always standardise to exactly `+1/sqrt(2)` or `-1/sqrt(2)`
-  (≈ ±0.71), whichever of the two years is larger — this is a mathematical
-  identity (standardising 2 points against their own mean/sd always gives
-  ±1/√2), not a data-dependent result. Months in `study_period` but
-  *outside* `reference_period` (2013 here) aren't subject to this and show
-  genuine anomalies instead.
+* **A handful of reference years makes every component look artificially
+  alike.** Standardising *n* reference observations against their own
+  mean/sd always satisfies two constraints: they sum to 0, and their squares
+  sum to *n* - 1. That leaves only *n* - 2 "degrees of freedom" for the
+  actual data to express itself through. With `n = 2` there are **zero**
+  degrees of freedom left: every month's anomaly is forced to exactly
+  `+1/sqrt(2)` or `-1/sqrt(2)` (≈ ±0.71), for *every* component, regardless
+  of what the underlying data actually looked like — which is why, with a
+  2-year reference, temperature, precipitation, drought and wind all
+  "look the same" during the reference period: they're not similar, they're
+  mathematically forced into the same shape. The reference period here
+  spans 3 years (1 degree of freedom per month) rather than 2 or 5+: enough
+  to break that exact-magnitude artifact and let each component's
+  standardised values differ from one another, while keeping this vignette
+  quick to build. It's a deliberate compromise for build speed, not a fully
+  realistic reference sample — with real, multi-decade data this is a
+  non-issue either way.
+* Months in `study_period` but *outside* `reference_period` (2014 here)
+  aren't constrained this way at all and show unambiguously genuine
+  anomalies, driven by the warming/drying trend built into the synthetic
+  data.
 
 
 ## Temperature: `temperature_component()`
@@ -155,8 +169,8 @@ t10 <- temperature_component(
   area                    = TRUE
 )
 
-head(t90, 3)   # inside reference_period: always +-0.71, see note above
-tail(t90, 3)   # 2013, outside reference_period: genuine anomalies
+head(t90, 3)   # inside reference_period (2011-2013): reflects the data
+tail(t90, 3)   # 2014, outside reference_period: genuine anomalies
 head(t10, 3)
 tail(t10, 3)
 ```
@@ -269,8 +283,8 @@ build_synthetic_psmsl_station <- function(dir, station_id, years,
 psmsl_dir <- tempfile("psmsl_")
 dir.create(psmsl_dir)
 set.seed(123)
-build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2013, base_level = 7020, trend_mm_per_year = 3)
-build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2013, base_level = 6980, trend_mm_per_year = 4)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2014, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2014, base_level = 6980, trend_mm_per_year = 4)
 
 sealevel_national <- sealevel_component(
   country_abbrev    = "FRA",     # must match the metadata's Country column
@@ -280,8 +294,8 @@ sealevel_national <- sealevel_component(
   sealevel_dir        = psmsl_dir
 )
 
-head(sealevel_national, 3)   # inside reference_period: always +-0.71
-tail(sealevel_national, 3)   # 2013, outside reference_period: genuine anomalies
+head(sealevel_national, 3)   # inside reference_period (2011-2013)
+tail(sealevel_national, 3)   # 2014, outside reference_period: genuine anomalies
 ```
 
 `sealevel_component()` also has a grid-cell mode (`area = FALSE`), which

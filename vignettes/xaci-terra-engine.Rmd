@@ -64,18 +64,20 @@ does not apply to it.
 
 We build the same kind of tiny synthetic NetCDF used elsewhere in this
 package's vignettes, and compute `temperature_component()` both ways to
-show they agree. As in the other vignettes, `reference_period` spans 2
+show they agree. As in the other vignettes, `reference_period` spans 3
 years and `study_period` extends a year beyond it, with a mild warming
 trend added to the synthetic data — see `vignette("xaci-components")` for
-why a 1-year reference is best avoided (an undefined per-month standard
-deviation) and why `study_period == reference_period` would be
-uninformative here too (with `study_period` limited to the reference years
-themselves, every value collapses to `+1/sqrt(2)` or `-1/sqrt(2)`, a
-mathematical identity of standardising exactly 2 points against their own
-mean/sd — not a data-dependent result, and not a meaningful check of
-whether the two engines actually agree on the underlying arithmetic).
+why a short reference period is best avoided: with 1 year, an undefined
+per-month standard deviation; with exactly 2, standardising always
+collapses to exactly `+1/sqrt(2)` or `-1/sqrt(2)` (a mathematical identity,
+not a data-dependent result) — informative for neither engine, and not a
+meaningful check of whether they actually agree on the underlying
+arithmetic. 3 reference years leave 1 "degree of freedom" per month (see
+`vignette("xaci-components")` for the exact argument) -- enough to break
+that shared artifact and keep this vignette quick to build, though not as
+fully realistic as a longer reference sample would be.
 
-This vignette's grid (2x2 cells, 3 years of hourly data) is deliberately
+This vignette's grid (2x2 cells, 4 years of hourly data) is deliberately
 tiny so it builds quickly — it demonstrates that the `terra` engine is a
 drop-in replacement with matching output, not that it holds up at country
 scale over decades. That larger-scale, non-toy validation is what the
@@ -117,13 +119,13 @@ lon      <- c(-1, 0)
 lat      <- c(43, 44)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
 
 t2m_file <- tempfile(fileext = ".nc")
 build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
 
-reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
-study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
+reference_period <- c("2011-01-01", "2013-12-31")  # 3 years
+study_period      <- c("2011-01-01", "2014-12-31")  # 4 years
 ```
 
 ```{r}
@@ -146,9 +148,9 @@ t90_terra <- temperature_component_terra(
   cores                    = 1L
 )
 
-# 2011-2012 (the reference years) standardise to +-1/sqrt(2) in both engines
-# (see note above); 2013 carries the genuine, trend-driven signal instead --
-# a much more informative comparison than 36 near-constant values would be.
+# 2011-2013 (the 3 reference years) reflect the actual data in both engines
+# (see note above); 2014 carries the genuine, trend-driven signal on top --
+# a much more informative comparison than a 2-year reference would give.
 rbind(base = round(t90_base, 4), terra = round(t90_terra, 4))
 all.equal(as.numeric(t90_base), as.numeric(t90_terra), tolerance = 1e-6)
 ```

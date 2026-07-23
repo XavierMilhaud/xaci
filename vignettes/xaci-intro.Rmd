@@ -148,14 +148,14 @@ build_synthetic_mask <- function(path, lon, lat) {
 }
 ```
 
-We build two years of hourly data on a tiny 2x2 grid:
+We build four years of hourly data on a tiny 2x2 grid:
 
 ```{r}
 lon      <- c(-1, 0)
 lat      <- c(43, 44)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2012-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
 
 t2m_file  <- tempfile(fileext = ".nc")
 mask_file <- tempfile(fileext = ".nc")
@@ -174,8 +174,8 @@ a degenerate case worth being aware of when experimenting with short,
 synthetic examples like this one.
 
 ```{r}
-reference_period <- c("2011-01-01", "2011-12-31")
-study_period      <- c("2011-01-01", "2012-12-31")
+reference_period <- c("2011-01-01", "2013-12-31")
+study_period      <- c("2011-01-01", "2014-12-31")
 
 t90 <- temperature_component(
   temperature_data_path = t2m_file,

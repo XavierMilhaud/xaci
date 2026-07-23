@@ -61,17 +61,21 @@ lon      <- c(-1, 0, 1)
 lat      <- c(43, 44, 45)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2012-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
 nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
 
-seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))
+# A mild warming/drying trend, so 2013 (the one out-of-reference year, see
+# below) shows genuine anomalies rather than pure noise.
+trend <- seq_len(nt) / nt
+
+seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
 t2m_vals <- array(NA_real_, c(nlo, nla, nt))
 for (i in seq_len(nlo)) for (j in seq_len(nla))
   t2m_vals[i, j, ] <- seasonal_t + (i + j) + rnorm(nt, sd = 1.5)
 
 tp_vals <- array(0, c(nlo, nla, nt))
 for (i in seq_len(nlo)) for (j in seq_len(nla)) {
-  rain_hours <- rbinom(nt, 1, 0.08)
+  rain_hours <- rbinom(nt, 1, 0.08 * (1 - 0.3 * trend))
   tp_vals[i, j, ] <- rain_hours * rexp(nt, rate = 800)
 }
 
@@ -106,13 +110,22 @@ build_synthetic_psmsl_station <- function(dir, station_id, years,
 
 psmsl_dir <- tempfile("psmsl_")
 dir.create(psmsl_dir)
-build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2012, base_level = 7020, trend_mm_per_year = 3)
-build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2012, base_level = 6980, trend_mm_per_year = 4)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2013, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2013, base_level = 6980, trend_mm_per_year = 4)
 
-reference_period <- c("2011-01-01", "2012-12-31")  # full 2 years: sea-level needs
-                                                    # >= 2 samples/calendar month, see below
-study_period      <- c("2011-01-01", "2012-12-31")
+reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
+study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
 ```
+
+`reference_period` spans 2 full years rather than 1 (a single reference year
+would give an undefined per-month standard deviation, and an empty
+sea-level result — see `vignette("xaci-components")`), and `study_period`
+extends a year beyond it. That second point matters for reading the output
+below: standardising exactly 2 reference-year observations against their
+own mean/sd always gives exactly `+1/sqrt(2)` or `-1/sqrt(2)` (≈ ±0.71) —
+a mathematical identity, not a data-dependent result — so every 2011/2012
+row is expected to look like that. 2013, being outside `reference_period`,
+is not subject to this and shows genuine anomalies instead.
 
 We use `"FRA"` as the `country_abbrev` here (rather than a fictitious code)
 because the sea-level component looks up stations by matching this value
@@ -144,7 +157,8 @@ monthly_national_aci <- calculate_aci(
   computed_components              = FALSE
 )
 
-monthly_national_aci
+head(monthly_national_aci, 3)   # inside reference_period: components ~ +-0.71
+tail(monthly_national_aci, 3)   # 2013, outside reference_period
 ```
 
 ## Reading the output
@@ -211,7 +225,9 @@ grid_aci <- calculate_aci(
   granularity                    = "month",
   area                            = FALSE,
   admin_level                     = NULL,
-  max_dist_km                     = 500
+  # See the note in vignette("xaci-components") on why this toy example
+  # widens max_dist_km beyond its 500 km default.
+  max_dist_km                     = 800
 )
 
 names(grid_aci)

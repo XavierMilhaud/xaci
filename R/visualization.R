@@ -377,7 +377,7 @@ plot_aci_timeseries <- function(aci_df,
 #'
 #' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}
 #'   with \code{area = TRUE}
-#' @param type    \code{"facet"} (default) or \code{"stacked"}.
+#' @param type    \code{"stacked"} (default), \code{"line"} or \code{"bar"}.
 #' @param components Character vector of component names to include.
 #'   Default: all six \code{c("t90","t10","precipitation","drought","wind","sealevel")}.
 #' @param title   Plot title.
@@ -622,7 +622,7 @@ plot_aci_dashboard <- function(aci_df,
   }
 
   p1 <- plot_aci_timeseries(aci_df, title = "ACI Time Series")
-  p2 <- plot_aci_components(aci_df, type = "facet",
+  p2 <- plot_aci_components(aci_df, type = "stacked",
                             title = "Components")
   p3 <- plot_aci_distribution(aci_df, type = "boxplot",
                               title = "Distributions")

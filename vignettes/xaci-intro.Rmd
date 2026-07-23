@@ -112,10 +112,11 @@ build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
 
   set.seed(1)
   seasonal <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))  # ~15C in Kelvin
+  warming  <- 0.6 * seq_len(nt) / nt   # a mild warming trend across the series
   vals <- array(NA_real_, dim = c(nlo, nla, nt))
   for (i in seq_len(nlo)) {
     for (j in seq_len(nla)) {
-      vals[i, j, ] <- seasonal + (i + j) + rnorm(nt, sd = 1.5)
+      vals[i, j, ] <- seasonal + warming + (i + j) + rnorm(nt, sd = 1.5)
     }
   }
 
@@ -147,14 +148,14 @@ build_synthetic_mask <- function(path, lon, lat) {
 }
 ```
 
-We build one year of hourly data on a tiny 2x2 grid:
+We build two years of hourly data on a tiny 2x2 grid:
 
 ```{r}
 lon      <- c(-1, 0)
 lat      <- c(43, 44)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2011-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2012-12-31 23:00", tz = "UTC"), by = "hour")
 
 t2m_file  <- tempfile(fileext = ".nc")
 mask_file <- tempfile(fileext = ".nc")
@@ -163,17 +164,24 @@ build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
 build_synthetic_mask(mask_file, lon, lat)
 ```
 
-...and compute the T90 component (frequency of hot days, standardised over
-the year we just generated as both the reference and study period):
+...and compute the T90 component (frequency of hot days), standardised
+against 2011 as a **reference** period, over the full two years as the
+**study** period. This distinction matters: if `study_period` were set equal
+to `reference_period` here (a single year), every month would have exactly
+one observation to compare against itself, and the standardised anomaly
+would be identically zero for every month, by construction — not a bug, just
+a degenerate case worth being aware of when experimenting with short,
+synthetic examples like this one.
 
 ```{r}
 reference_period <- c("2011-01-01", "2011-12-31")
+study_period      <- c("2011-01-01", "2012-12-31")
 
 t90 <- temperature_component(
   temperature_data_path = t2m_file,
   country_abbrev         = "XXX",
   reference_period       = reference_period,
-  study_period            = reference_period,
+  study_period            = study_period,
   mask_path               = mask_file,
   percentile              = 90,
   extremum                = "max",
@@ -181,8 +189,14 @@ t90 <- temperature_component(
   area                    = TRUE     # national (spatially averaged) series
 )
 
-head(t90)
+head(t90, 14)
 ```
+
+Note that every 2011 month is exactly `0`: that year *is* the reference
+period, so each of its months is being compared to itself, by construction.
+2012's months show real anomalies instead, since the mild warming trend
+built into the synthetic data (see the code above) makes 2012 run warmer
+than the 2011 baseline.
 
 `t90` is a named numeric vector: one standardised value per month, positive
 values indicating months with more hot days than the reference average,

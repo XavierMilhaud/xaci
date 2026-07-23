@@ -1,19 +1,264 @@
 ---
-title: "xaci-visualization"
+title: "Visualizing ACI Results"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{xaci-visualization}
+  %\VignetteIndexEntry{Visualizing ACI Results}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6.5,
+  fig.height = 4.2
 )
 ```
 
 ```{r setup}
 library(xaci)
+```
+
+xaci ships six plotting functions covering the two shapes of output produced
+by `calculate_aci()` (see `vignette("xaci-full-pipeline")`): time-indexed
+`data.frame`s (national or administrative level) and spatial grids
+(grid-cell level, for mapping). This vignette demonstrates each of them on
+the same synthetic dataset used throughout this package's vignettes.
+
+## Preparing example results
+
+```{r, echo = FALSE}
+build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  ncvar <- ncdf4::ncvar_def(var, unit, list(dim_lon, dim_lat, dim_time),
+                            missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(ncvar))
+  ncdf4::ncvar_put(nc, ncvar, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+build_synthetic_mask <- function(path, lon, lat) {
+  dim_lon <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  var_mask <- ncdf4::ncvar_def("country", "1", list(dim_lon, dim_lat),
+                               missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_mask))
+  ncdf4::ncvar_put(nc, var_mask, matrix(1, length(lon), length(lat)))
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+set.seed(11)
+lon      <- c(-1, 0, 1)
+lat      <- c(43, 44, 45)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
+nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+# A mild warming/drying trend, so 2013 (the one out-of-reference year, see
+# vignette("xaci-components") for why reference_period stops at 2012) shows
+# genuine anomalies rather than pure noise -- this is what gives the plots
+# below actual visual structure instead of flat, uninformative series.
+trend <- seq_len(nt) / nt
+
+seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
+t2m_vals <- array(NA_real_, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla))
+  t2m_vals[i, j, ] <- seasonal_t + (i + j) + rnorm(nt, sd = 1.5)
+
+tp_vals <- array(0, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla)) {
+  rain_hours <- rbinom(nt, 1, 0.08 * (1 - 0.3 * trend))
+  tp_vals[i, j, ] <- rain_hours * rexp(nt, rate = 800)
+}
+
+u10_vals <- array(rnorm(nlo * nla * nt, mean = 3, sd = 4), c(nlo, nla, nt))
+v10_vals <- array(rnorm(nlo * nla * nt, mean = 1, sd = 4), c(nlo, nla, nt))
+
+t2m_file  <- tempfile(fileext = ".nc")
+tp_file   <- tempfile(fileext = ".nc")
+u10_file  <- tempfile(fileext = ".nc")
+v10_file  <- tempfile(fileext = ".nc")
+mask_file <- tempfile(fileext = ".nc")
+
+build_synthetic_nc(t2m_file, "t2m", "K",     lon, lat, time_vec, origin, t2m_vals)
+build_synthetic_nc(tp_file,  "tp",  "m",     lon, lat, time_vec, origin, tp_vals)
+build_synthetic_nc(u10_file, "u10", "m s-1", lon, lat, time_vec, origin, u10_vals)
+build_synthetic_nc(v10_file, "v10", "m s-1", lon, lat, time_vec, origin, v10_vals)
+build_synthetic_mask(mask_file, lon, lat)
+
+month_frac <- c("0417", "125", "2083", "2917", "375", "4583",
+                "5417", "625", "7083", "7917", "875", "9583")
+build_synthetic_psmsl_station <- function(dir, station_id, years,
+                                          base_level, trend_mm_per_year) {
+  lines <- character(0)
+  for (y in years) {
+    for (m in seq_len(12)) {
+      level <- base_level + trend_mm_per_year * (y - years[1]) + rnorm(1, sd = 15)
+      lines <- c(lines, sprintf("%d.%s;%.1f;0;000", y, month_frac[m], level))
+    }
+  }
+  writeLines(lines, file.path(dir, paste0(station_id, ".txt")))
+}
+
+psmsl_dir <- tempfile("psmsl_")
+dir.create(psmsl_dir)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2013, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2013, base_level = 6980, trend_mm_per_year = 4)
+
+reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
+study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
+```
+
+We compute a national, monthly ACI series (for the time-series-style plots)
+and a grid-cell version (for the map), exactly as in
+`vignette("xaci-full-pipeline")`:
+
+```{r, message = FALSE}
+monthly_national_aci <- calculate_aci(
+  country_abbrev           = "FRA",
+  study_period               = study_period,
+  reference_period            = reference_period,
+  temperature_data_path      = t2m_file,
+  precipitation_data_path    = tp_file,
+  wind_u10_data_path          = u10_file,
+  wind_v10_data_path          = v10_file,
+  mask_data_path               = mask_file,
+  sealevel_dir                  = psmsl_dir,
+  granularity                    = "month",
+  area                            = TRUE
+)
+
+grid_aci <- calculate_aci(
+  country_abbrev           = "FRA",
+  study_period               = study_period,
+  reference_period            = reference_period,
+  temperature_data_path      = t2m_file,
+  precipitation_data_path    = tp_file,
+  wind_u10_data_path          = u10_file,
+  wind_v10_data_path          = v10_file,
+  mask_data_path               = mask_file,
+  sealevel_dir                  = psmsl_dir,
+  granularity                    = "month",
+  area                            = FALSE,
+  admin_level                     = NULL,
+  # See the note in vignette("xaci-components") on why this toy example
+  # widens max_dist_km beyond its 500 km default -- without it, a couple of
+  # cells in our fictitious grid would have no sea-level station in range
+  # (NA there, and NA ACI as a result), leaving visible gaps on the map.
+  max_dist_km                     = 800
+)
+```
+
+## Time series: `plot_aci_timeseries()`
+
+```{r}
+plot_aci_timeseries(monthly_national_aci, smooth = TRUE, span = 0.3)
+```
+
+With only two years of monthly (24-point) synthetic data the LOESS trend
+line is not very meaningful — with real, multi-decade data it highlights
+the long-run direction of the index. `fill_area = TRUE` (the default) shades
+the area between the series and zero, making positive/negative months
+visually distinct; `colour` controls the line colour.
+
+## Component breakdown: `plot_aci_components()`
+
+```{r}
+plot_aci_components(monthly_national_aci, type = "bar")
+```
+
+```{r}
+plot_aci_components(monthly_national_aci, type = "stacked")
+```
+
+`components` restricts the plot to a subset, e.g.
+`plot_aci_components(monthly_national_aci, type = "bar", components = c("t90", "t10"))`
+to focus on temperature only.
+
+## Distributions: `plot_aci_distribution()`
+
+```{r}
+plot_aci_distribution(monthly_national_aci, type = "boxplot", include_aci = TRUE)
+```
+
+```{r}
+plot_aci_distribution(monthly_national_aci, type = "violin")
+```
+
+`type = "density"` is also available. This is useful to compare the spread
+of each component at a glance, e.g. to spot which one is driving an
+unusually high or low ACI value in a given month.
+
+## Maps: `plot_aci_map()`
+
+`plot_aci_map()` dispatches on its input: a grid-cell list or bare array
+produces a **raster** map; a `data.frame` (administrative-level output, see
+`vignette("xaci-admin-levels")`) produces a **choropleth**. Here we use the
+grid-cell result computed above, averaged over the whole study period:
+
+```{r}
+plot_aci_map(grid_aci, variable = "ACI", time_index = "mean",
+             borders = FALSE, title = "Mean ACI over the study period")
+```
+
+`borders = TRUE` (the default) overlays the country's administrative
+boundary, downloaded on demand via `rnaturalearth` / GADM — this requires
+network access, so it is disabled (`borders = FALSE`) in this
+self-contained example. In an interactive session with network access, you
+can drop `borders = FALSE` to get the overlay for free.
+
+A single time slice can be plotted by passing an integer instead of
+`"mean"`:
+
+```{r}
+plot_aci_map(grid_aci, variable = "t90", time_index = 6, borders = FALSE)
+```
+
+A bare array (e.g. `grid_aci$ACI` on its own, once it carries `lon`/`lat`
+attributes as `calculate_aci()` attaches them) also works directly:
+
+```{r}
+plot_aci_map(grid_aci$drought, time_index = "mean", borders = FALSE,
+             var_label = "Drought anomaly")
+```
+
+## Dashboard: `plot_aci_dashboard()`
+
+`plot_aci_dashboard()` arranges the time series, component facets, boxplot
+and density plots into a single figure. It requires the `patchwork`
+package:
+
+```{r}
+if (requireNamespace("patchwork", quietly = TRUE)) {
+  plot_aci_dashboard(monthly_national_aci)
+} else {
+  message("Install the 'patchwork' package to use plot_aci_dashboard().")
+}
+```
+
+## Animated maps: `animate_aci_map()`
+
+For a time-evolving view of a spatial variable, `animate_aci_map()` produces
+a GIF (requires the `gganimate` and `gifski` packages). This is
+computationally heavier and not run in this vignette, but the call looks
+like:
+
+```{r, eval = FALSE}
+animate_aci_map(grid_aci, variable = "ACI", fps = 2,
+                save_path = "aci_animation.gif")
+```
+
+```{r, include = FALSE}
+unlink(c(t2m_file, tp_file, u10_file, v10_file, mask_file))
+unlink(psmsl_dir, recursive = TRUE)
 ```

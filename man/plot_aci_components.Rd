@@ -16,7 +16,7 @@ plot_aci_components(
 \item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
 with \code{area = TRUE}}
 
-\item{type}{\code{"facet"} (default) or \code{"stacked"}.}
+\item{type}{\code{"stacked"} (default), \code{"line"} or \code{"bar"}.}
 
 \item{components}{Character vector of component names to include.
 Default: all six \code{c("t90","t10","precipitation","drought","wind","sealevel")}.}

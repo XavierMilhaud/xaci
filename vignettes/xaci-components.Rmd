@@ -28,9 +28,12 @@ synthetic dataset built with the same pattern as `vignette("xaci-intro")`.
 
 ## Building a synthetic ERA5-like extract
 
-We generate two years of hourly data (`t2m`, `tp`, `u10`, `v10`) on a tiny
+We generate three years of hourly data (`t2m`, `tp`, `u10`, `v10`) on a tiny
 3x3 grid, plus a land-mask NetCDF, entirely in memory / temp files — no
-network access required.
+network access required. We use the first two years (2011-2012) as the
+**reference period** and all three years (2011-2013) as the **study
+period**: this matters for what the standardised output looks like, see the
+note right after the data are generated below.
 
 ```{r}
 build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
@@ -65,19 +68,24 @@ lon      <- c(-1, 0, 1)
 lat      <- c(43, 44, 45)
 origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
 time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
-                as.POSIXct("2012-12-31 23:00", tz = "UTC"), by = "hour")
+                as.POSIXct("2013-12-31 23:00", tz = "UTC"), by = "hour")
 nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
 
-# --- t2m: seasonal cycle in Kelvin ---
-seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))
+# A mild warming/drying trend across the series, so that 2013 (the one
+# out-of-reference year) shows genuine anomalies rather than pure noise.
+trend <- seq_len(nt) / nt
+
+# --- t2m: seasonal cycle in Kelvin, plus warming trend ---
+seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
 t2m_vals <- array(NA_real_, c(nlo, nla, nt))
 for (i in seq_len(nlo)) for (j in seq_len(nla))
   t2m_vals[i, j, ] <- seasonal_t + (i + j) + rnorm(nt, sd = 1.5)
 
-# --- tp: precipitation (m/hour), mostly dry with occasional rain events ---
+# --- tp: precipitation (m/hour), mostly dry with occasional rain events,
+# with rain becoming rarer over time (drying trend) ---
 tp_vals <- array(0, c(nlo, nla, nt))
 for (i in seq_len(nlo)) for (j in seq_len(nla)) {
-  rain_hours <- rbinom(nt, 1, 0.08)
+  rain_hours <- rbinom(nt, 1, 0.08 * (1 - 0.3 * trend))
   tp_vals[i, j, ] <- rain_hours * rexp(nt, rate = 800)
 }
 
@@ -97,11 +105,28 @@ build_synthetic_nc(u10_file, "u10", "m s-1", lon, lat, time_vec, origin, u10_val
 build_synthetic_nc(v10_file, "v10", "m s-1", lon, lat, time_vec, origin, v10_vals)
 build_synthetic_mask(mask_file, lon, lat)
 
-reference_period <- c("2011-01-01", "2012-12-31")  # full 2 years: sea-level needs
-                                                    # >= 2 samples/calendar month, see below
-study_period      <- c("2011-01-01", "2012-12-31")
+reference_period <- c("2011-01-01", "2012-12-31")  # 2 years
+study_period      <- c("2011-01-01", "2013-12-31")  # 3 years
 country_abbrev    <- "XXX"   # fictitious code for this synthetic example
 ```
+
+Two things worth knowing before reading the output below, both consequences
+of using a small, synthetic reference period rather than the multi-decade
+history you'd have with real data:
+
+* **`reference_period` must span at least 2 years.** Standardisation divides
+  by a reference-period standard deviation computed separately for each
+  calendar month; with only 1 year, every month has exactly 1 reference
+  sample, an undefined (`NA`) standard deviation, and (for the sea-level
+  component specifically) an empty result.
+* **A month that falls *inside* `reference_period` with exactly 2 reference
+  years will always standardise to exactly `+1/sqrt(2)` or `-1/sqrt(2)`
+  (≈ ±0.71), whichever of the two years is larger — this is a mathematical
+  identity (standardising 2 points against their own mean/sd always gives
+  ±1/√2), not a data-dependent result. Months in `study_period` but
+  *outside* `reference_period` (2013 here) aren't subject to this and show
+  genuine anomalies instead.
+
 
 ## Temperature: `temperature_component()`
 
@@ -130,8 +155,10 @@ t10 <- temperature_component(
   area                    = TRUE
 )
 
-head(t90)
-head(t10)
+head(t90, 3)   # inside reference_period: always +-0.71, see note above
+tail(t90, 3)   # 2013, outside reference_period: genuine anomalies
+head(t10, 3)
+tail(t10, 3)
 ```
 
 Internally, `temperature_component()` averages a "day" half and a "night"
@@ -155,7 +182,8 @@ prec <- precipitation_component(
   area                       = TRUE
 )
 
-head(prec)
+head(prec, 3)
+tail(prec, 3)
 ```
 
 ## Drought: `drought_component()`
@@ -173,7 +201,8 @@ drought <- drought_component(
   area                       = TRUE
 )
 
-head(drought)
+head(drought, 3)
+tail(drought, 3)
 ```
 
 ## Wind: `wind_component()`
@@ -192,7 +221,8 @@ wind <- wind_component(
   area                  = TRUE
 )
 
-head(wind)
+head(wind, 3)
+tail(wind, 3)
 ```
 
 ## Sea level: `sealevel_component()`
@@ -208,14 +238,10 @@ measurements for two real French stations (Brest and Marseille, PSMSL IDs 1
 and 61) in the format `sealevel_load_data()` expects, instead of downloading
 real records.
 
-Note that `reference_period` above spans the full two years of our
-synthetic history rather than a single year: sea-level standardisation
-computes one standard deviation per calendar month *from the reference
-period alone*, so a one-year reference would give exactly one observation
-per month, an undefined (`NA`) standard deviation, and — after that `NA`
-propagates through every standardised value — an empty result. With real,
-multi-decade PSMSL records this is a non-issue; it only matters for a
-minimal example like this one.
+See the note above on why `reference_period` spans 2 full years here rather
+than 1: with a single reference year, sea-level standardisation would divide
+by an undefined (`NA`) per-month standard deviation, and — after that `NA`
+propagates through every standardised value — return an empty result.
 
 ```{r}
 psmsl_meta <- load_psmsl_data()
@@ -243,8 +269,8 @@ build_synthetic_psmsl_station <- function(dir, station_id, years,
 psmsl_dir <- tempfile("psmsl_")
 dir.create(psmsl_dir)
 set.seed(123)
-build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2012, base_level = 7020, trend_mm_per_year = 3)
-build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2012, base_level = 6980, trend_mm_per_year = 4)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2013, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2013, base_level = 6980, trend_mm_per_year = 4)
 
 sealevel_national <- sealevel_component(
   country_abbrev    = "FRA",     # must match the metadata's Country column
@@ -254,7 +280,8 @@ sealevel_national <- sealevel_component(
   sealevel_dir        = psmsl_dir
 )
 
-head(sealevel_national)
+head(sealevel_national, 3)   # inside reference_period: always +-0.71
+tail(sealevel_national, 3)   # 2013, outside reference_period: genuine anomalies
 ```
 
 `sealevel_component()` also has a grid-cell mode (`area = FALSE`), which
@@ -269,7 +296,13 @@ sealevel_grid <- sealevel_component(
   reference_period = reference_period,
   area              = FALSE,
   mask_path         = mask_file,      # supplies the target lon/lat grid
-  max_dist_km       = 500,
+  # Our fictitious grid (lon -1/0/1, lat 43/44/45) sits ~350-650 km from
+  # Brest and Marseille; the default max_dist_km = 500 would leave a couple
+  # of cells with no station in range (NA sea level -> NA ACI there). We
+  # widen it here purely because this toy grid's placement is arbitrary --
+  # with a real ERA5 grid this cutoff is meaningful and NA cells far from
+  # the coast are expected, see ?sealevel_component.
+  max_dist_km       = 800,
   sealevel_dir      = psmsl_dir
 )
 

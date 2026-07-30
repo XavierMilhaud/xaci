@@ -2,9 +2,9 @@ Package: xaci
 Title: Package xaci for Actuarial Climate Index
 Version: 0.1.0
 Authors@R: c(
-    person("Dabakh", "Kane", , "kanedabakh55@gmail.com", role = c("aut", "ctb")),
-    person("Esteban", "Mauboussin", , "esteban.mauboussin@cnp.fr", role = "ctb"),
-    person("Xavier", "Milhaud", , "xavier.milhaud.research@gmail.com", role = c("aut", "cre", "ctb"))
+    person("Xavier", "Milhaud", , "xavier.milhaud.research@gmail.com", role = c("aut", "cre", "ctb")),
+    person("Dabakh", "Kane", , "kanedabakh55@gmail.com", role = "ctb"),
+    person("Esteban", "Mauboussin", , "esteban.mauboussin@cnp.fr", role = "ctb")
   )
 Description: Computes the Actuarial Climate Index (ACI) and its components
     (temperature, precipitation, drought, wind, sea level) from gridded climate
@@ -12,8 +12,8 @@ Description: Computes the Actuarial Climate Index (ACI) and its components
     in Garrido, Milhaud & Olympio (2026) for a French/European actuarial
     climate index, building on the American Academy of Actuaries framework.
 License: MIT + file LICENSE
-URL: https://github.com/XavierMilhaud/ACI-Rpackage
-BugReports: https://github.com/XavierMilhaud/ACI-Rpackage/issues
+URL: https://github.com/XavierMilhaud/xaci
+BugReports: https://github.com/XavierMilhaud/xaci/issues
 Encoding: UTF-8
 LazyData: true
 Depends:

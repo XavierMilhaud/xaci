@@ -11,21 +11,17 @@ Computes the Actuarial Climate Index (ACI) and its components (temperature, prec
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/XavierMilhaud/ACI-Rpackage}
-  \item Report bugs at \url{https://github.com/XavierMilhaud/ACI-Rpackage/issues}
+  \item \url{https://github.com/XavierMilhaud/xaci}
+  \item Report bugs at \url{https://github.com/XavierMilhaud/xaci/issues}
 }
 
 }
 \author{
 \strong{Maintainer}: Xavier Milhaud \email{xavier.milhaud.research@gmail.com} [contributor]
 
-Authors:
-\itemize{
-  \item Dabakh Kane \email{kanedabakh55@gmail.com} [contributor]
-}
-
 Other contributors:
 \itemize{
+  \item Dabakh Kane \email{kanedabakh55@gmail.com} [contributor]
   \item Esteban Mauboussin \email{esteban.mauboussin@cnp.fr} [contributor]
 }
 

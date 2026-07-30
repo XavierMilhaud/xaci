@@ -394,10 +394,10 @@ calculate_aci <- function(country_abbrev,
     } else {
       message("Building administrative mask (this may take a moment)...")
       if (engine == "terra") {
-        tmp_r       <- load_component_terra(temperature_data_path, "t2m", mask_data_path)
+        tmp_r       <- load_component_terra(precipitation_data_path, "tp", mask_data_path)
         tmp_dataset <- .spatraster_to_list(tmp_r[[1]])   # 1 seule couche suffit pour lon/lat
       } else {
-        tmp_dataset <- load_component(temperature_data_path, "t2m", mask_data_path)
+        tmp_dataset <- load_component(precipitation_data_path, "tp", mask_data_path)
       }
       admin_mask  <- build_admin_mask(
         lon            = tmp_dataset$lon,
@@ -524,7 +524,7 @@ calculate_aci <- function(country_abbrev,
 
   } else {
 
-    study_tag <- paste(substr(study_period[1], 1, 4),
+    study_tag <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
                        substr(study_period[2], 1, 4), sep = "_")
 
     .load_rds <- function(name) {
@@ -671,10 +671,11 @@ calculate_aci <- function(country_abbrev,
   # Nom de fichier cache pour les composantes deja agregees par unite admin.
   # Le cache depend du pays, du niveau, ET de la periode de reference (car la
   # standardisation utilise reference_period). Il ne depend PAS de study_period
-  # ni de granularity : ces deux dimensions sont appliquees apres le cache
-  # (aggregate_granularity() est appele en aval).
-  ref_tag_admin <- paste(substr(reference_period[1], 1, 4),
-                         substr(reference_period[2], 1, 4), sep = "_")
+  # ni de granularity (en l'occurence la date de debut de la study_period correspond
+  # a la date de debut de reference_period) : ces deux dimensions sont appliquees
+  # apres le cache (aggregate_granularity() est appele en aval).
+  ref_tag_admin <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
+                         substr(study_period[2], 1, 4), sep = "_")
   admin_comp_rds <- file.path(
     save_dir,
     sprintf("admin_components_%s_L%d_%s.rds",

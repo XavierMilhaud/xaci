@@ -217,7 +217,7 @@ temperature_component <- function(temperature_data_path,
                                   save_dir              = paste0("results/", country_abbrev),
                                   load_dir              = paste0("results/", country_abbrev)) {
 
-  study_tag <- paste(substr(study_period[1], 1, 4),
+  study_tag <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
                      substr(study_period[2], 1, 4), sep = "_")
   label     <- paste0("temperature_t", as.integer(percentile))
 

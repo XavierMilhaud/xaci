@@ -191,12 +191,12 @@ test_that("drought_component : save = TRUE puis computed_components = TRUE redon
   cache_dir <- tempfile()
   dir.create(cache_dir)
   reference_period <- c("2001-01-01", "2002-12-31")
-  study_period      <- reference_period  # tag de cache "drought_2001_2002.rds"
+  study_period      <- reference_period  # tag de cache "drought_2001_2002_2002.rds"
 
   res_fresh <- drought_component(tp_path, "XX", reference_period, study_period,
                                   area = FALSE, save = TRUE, save_dir = cache_dir)
 
-  expect_true(file.exists(file.path(cache_dir, "drought_2001_2002.rds")))
+  expect_true(file.exists(file.path(cache_dir, "drought_2001_2002_2002.rds")))
 
   res_cached <- drought_component(tp_path, "XX", reference_period, study_period,
                                    area = FALSE, computed_components = TRUE,

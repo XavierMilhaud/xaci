@@ -3,8 +3,8 @@
 Implements the computation of the **Actuarial Climate Index (ACI)** and its six
 components from gridded climate data (NetCDF ERA5) and tide gauge stations (PSMSL).
 
-> Reference: Garrido, Milhaud & Olympio (2026). *The definition of a French
-> actuarial climate index; one more step towards a European index.* ⟨hal-04491982⟩
+> Reference: Garrido, Milhaud & Olympio (2025). *The definition of a French
+> actuarial climate index; one more step towards a European index.* ⟨hal-04491982v2⟩
 
 ---
 
@@ -193,7 +193,7 @@ testthat::test_dir("tests/testthat")
 
 ## References
 
-- Garrido J., Milhaud X., Olympio A. (2026). *The definition of a French actuarial climate index*. ⟨hal-04491982⟩
+- Garrido J., Milhaud X., Olympio A. (2025). *The definition of a French actuarial climate index*. ⟨hal-04491982v2⟩
 - American Academy of Actuaries et al. (2019). *ACI: Actuaries Climate Index Development and Design v1.1*.
 - Hersbach et al. (2023). *ERA5 hourly data on single levels*. Copernicus C3S. DOI: 10.24381/cds.adbb2d47
 - PSMSL (2023). *Tide Gauge Data*. http://www.psmsl.org/data/obtaining/

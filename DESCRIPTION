@@ -9,8 +9,9 @@ Authors@R: c(
 Description: Computes the Actuarial Climate Index (ACI) and its components
     (temperature, precipitation, drought, wind, sea level) from gridded climate
     data (NetCDF) and tide gauge records. Implements the methodology described
-    in Garrido, Milhaud & Olympio (2026) for a French/European actuarial
-    climate index, building on the American Academy of Actuaries framework.
+    in Garrido, Milhaud & Olympio (2025) <https://hal.science/hal-04491982v2>
+    for a French/European actuarial climate index, building on the American 
+    Academy of Actuaries framework.
 License: MIT + file LICENSE
 URL: https://github.com/XavierMilhaud/xaci
 BugReports: https://github.com/XavierMilhaud/xaci/issues
@@ -39,6 +40,8 @@ Suggests:
     gganimate,
     gifski,
     knitr,
-    rmarkdown
+    rmarkdown,
+    spelling
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
+Language: en-US

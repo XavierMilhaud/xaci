@@ -122,7 +122,7 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
     dest_dir <- file.path("data", "era5", toupper(country_abbrev))
   }
 
-  dir.create(file.path("data", "era5", toupper(country_abbrev), "source"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(dest_dir, "source"), recursive = TRUE, showWarnings = FALSE)
 
   yearly_files <- character(length(years))
 
@@ -155,7 +155,7 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
       suppressWarnings(
         ecmwfr::wf_request(
           request  = request,
-          path     = normalizePath(dest_dir, mustWork = FALSE),
+          path     = normalizePath(file.path(dest_dir, "source"), mustWork = FALSE),
           transfer = TRUE,
           verbose  = TRUE
         )

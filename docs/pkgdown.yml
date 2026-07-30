@@ -3,9 +3,10 @@ pkgdown: 2.1.3
 pkgdown_sha: ~
 articles:
   xaci-admin-levels: xaci-admin-levels.html
+  xaci-aggregation-matrix: xaci-aggregation-matrix.html
   xaci-components: xaci-components.html
   xaci-full-pipeline: xaci-full-pipeline.html
   xaci-intro: xaci-intro.html
   xaci-terra-engine: xaci-terra-engine.html
   xaci-visualization: xaci-visualization.html
-last_built: 2026-07-30T06:54Z
+last_built: 2026-07-30T15:08Z

@@ -5,6 +5,16 @@ vignette: >
   %\VignetteIndexEntry{Visualizing ACI Results}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+resource_files:
+  - xaci-visualization-unnamed-chunk-4-1.png
+  - xaci-visualization-unnamed-chunk-5-1.png
+  - xaci-visualization-unnamed-chunk-6-1.png
+  - xaci-visualization-unnamed-chunk-7-1.png
+  - xaci-visualization-unnamed-chunk-8-1.png
+  - xaci-visualization-unnamed-chunk-9-1.png
+  - xaci-visualization-unnamed-chunk-10-1.png
+  - xaci-visualization-unnamed-chunk-11-1.png
+  - xaci-visualization-unnamed-chunk-12-1.png
 ---
 
 ```{r, include = FALSE}
@@ -13,7 +23,7 @@ knitr::opts_chunk$set(
   comment   = "#>",
   fig.width = 6.5,
   fig.height = 4.2,
-  fig.path = "vignettes/figures-xaci-visualization/",
+  fig.path = "vignettes/xaci-visualization-",
   echo = TRUE
 )
 ```

@@ -5,6 +5,8 @@ vignette: >
   %\VignetteIndexEntry{The Aggregation Matrix: Every Spatial x Temporal Combination}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+resource_files:
+  - xaci-aggregation-matrix-unnamed-chunk-10-1.png
 ---
 
 
@@ -394,7 +396,7 @@ plot_aci_map(matrix_results$grid_season, variable = "ACI", time_index = "mean",
 ```
 
 <div class="figure">
-<img src="vignettes/figures-xaci-aggregation-matrix/unnamed-chunk-10-1.png" alt="Map of the mean seasonal ACI over the synthetic 2x2 grid"  />
+<img src="vignettes/xaci-aggregation-matrix-unnamed-chunk-10-1.png" alt="Map of the mean seasonal ACI over the synthetic 2x2 grid"  />
 <p class="caption">plot of chunk unnamed-chunk-10</p>
 </div>
 

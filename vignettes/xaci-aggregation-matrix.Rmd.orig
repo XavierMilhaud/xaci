@@ -5,6 +5,8 @@ vignette: >
   %\VignetteIndexEntry{The Aggregation Matrix: Every Spatial x Temporal Combination}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+resource_files:
+  - xaci-aggregation-matrix-unnamed-chunk-10-1.png
 ---
 
 ```{r, include = FALSE}
@@ -13,7 +15,7 @@ knitr::opts_chunk$set(
   comment   = "#>",
   fig.width = 6,
   fig.height = 4,
-  fig.path = "vignettes/figures-xaci-aggregation-matrix/",
+  fig.path = "vignettes/xaci-aggregation-matrix-",
   echo = TRUE
 )
 ```

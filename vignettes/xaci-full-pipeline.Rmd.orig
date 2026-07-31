@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
   comment   = "#>",
   fig.width = 6,
   fig.height = 4,
-  fig.path = "vignettes/figures-xaci-full-pipeline/",
+  fig.path = "vignettes/xaci-full-pipeline-",
   echo = TRUE
 )
 ```

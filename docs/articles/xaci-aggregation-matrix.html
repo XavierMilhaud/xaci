@@ -293,12 +293,9 @@ mode returns:</p>
 <span><span class="co">#&gt; [1] "data.frame"</span></span>
 <span><span class="co">#&gt; [1] 48  7</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">national_monthly</span>, <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="co">#&gt;            drought wind precipitation       t10        t90   sealevel</span></span>
-<span><span class="co">#&gt; 2011-01 -0.9954027    0     0.9008374 0.9203157 -0.8431515  0.6340295</span></span>
-<span><span class="co">#&gt; 2011-02 -1.0492241    0     0.9040871 0.9443331 -1.0830902 -1.1163822</span></span>
-<span><span class="co">#&gt;                ACI</span></span>
-<span><span class="co">#&gt; 2011-01 -0.3329282</span></span>
-<span><span class="co">#&gt; 2011-02 -0.4607378</span></span></code></pre></div>
+<span><span class="co">#&gt;            drought wind precipitation       t10        t90   sealevel        ACI</span></span>
+<span><span class="co">#&gt; 2011-01 -0.9954027    0     0.9008374 0.9203157 -0.8431515  0.6340295 -0.3329282</span></span>
+<span><span class="co">#&gt; 2011-02 -1.0492241    0     0.9040871 0.9443331 -1.0830902 -1.1163822 -0.4607378</span></span></code></pre></div>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">grid_monthly</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calculate_aci.html">calculate_aci</a></span><span class="op">(</span></span>
 <span>  country_abbrev <span class="op">=</span> <span class="st">"FRA"</span>, study_period <span class="op">=</span> <span class="va">study_period</span>, reference_period <span class="op">=</span> <span class="va">reference_period</span>,</span>
@@ -363,24 +360,15 @@ the same computation reported at each temporal granularity:</p>
 <span><span class="co">#&gt;    month   season semester     year </span></span>
 <span><span class="co">#&gt;       48       17        8        4</span></span>
 <span><span class="va">national_by_granularity</span><span class="op">$</span><span class="va">semester</span></span>
-<span><span class="co">#&gt;            drought      wind precipitation         t10        t90   sealevel</span></span>
-<span><span class="co">#&gt; 2011-S1 -1.0726834 0.0000000    0.71191686  0.97759636 -1.0646249 -0.2435785</span></span>
-<span><span class="co">#&gt; 2011-S2 -0.2508652 0.0000000    0.12721814  0.98284998 -1.0032526 -0.1374611</span></span>
-<span><span class="co">#&gt; 2012-S1  0.6393322 0.0000000   -0.01142285 -0.10235882  0.2376682  0.2216346</span></span>
-<span><span class="co">#&gt; 2012-S2 -0.8133445 0.0000000   -0.24741900 -0.01973684  0.1508050  0.3067992</span></span>
-<span><span class="co">#&gt; 2013-S1  0.4333512 0.0000000   -0.70049401 -0.87523753  0.8269567  0.0219439</span></span>
-<span><span class="co">#&gt; 2013-S2  1.0642097 0.0000000    0.12020086 -0.96311313  0.8524477 -0.1693381</span></span>
-<span><span class="co">#&gt; 2014-S1  2.8006632 0.2327829   -1.00193126 -1.81931870  1.8426589  0.4725578</span></span>
-<span><span class="co">#&gt; 2014-S2  1.8220896 0.1969534    0.10514547 -2.23259299  2.5165369  1.3834795</span></span>
-<span><span class="co">#&gt;                ACI</span></span>
-<span><span class="co">#&gt; 2011-S1 -0.4714814</span></span>
-<span><span class="co">#&gt; 2011-S2 -0.4110081</span></span>
-<span><span class="co">#&gt; 2012-S1  0.1946660</span></span>
-<span><span class="co">#&gt; 2012-S2 -0.1593965</span></span>
-<span><span class="co">#&gt; 2013-S1  0.2768154</span></span>
-<span><span class="co">#&gt; 2013-S2  0.5704046</span></span>
-<span><span class="co">#&gt; 2014-S1  1.1130777</span></span>
-<span><span class="co">#&gt; 2014-S2  1.3750027</span></span></code></pre></div>
+<span><span class="co">#&gt;            drought      wind precipitation         t10        t90   sealevel        ACI</span></span>
+<span><span class="co">#&gt; 2011-S1 -1.0726834 0.0000000    0.71191686  0.97759636 -1.0646249 -0.2435785 -0.4714814</span></span>
+<span><span class="co">#&gt; 2011-S2 -0.2508652 0.0000000    0.12721814  0.98284998 -1.0032526 -0.1374611 -0.4110081</span></span>
+<span><span class="co">#&gt; 2012-S1  0.6393322 0.0000000   -0.01142285 -0.10235882  0.2376682  0.2216346  0.1946660</span></span>
+<span><span class="co">#&gt; 2012-S2 -0.8133445 0.0000000   -0.24741900 -0.01973684  0.1508050  0.3067992 -0.1593965</span></span>
+<span><span class="co">#&gt; 2013-S1  0.4333512 0.0000000   -0.70049401 -0.87523753  0.8269567  0.0219439  0.2768154</span></span>
+<span><span class="co">#&gt; 2013-S2  1.0642097 0.0000000    0.12020086 -0.96311313  0.8524477 -0.1693381  0.5704046</span></span>
+<span><span class="co">#&gt; 2014-S1  2.8006632 0.2327829   -1.00193126 -1.81931870  1.8426589  0.4725578  1.1130777</span></span>
+<span><span class="co">#&gt; 2014-S2  1.8220896 0.1969534    0.10514547 -2.23259299  2.5165369  1.3834795  1.3750027</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="the-full-matrix">The full matrix<a class="anchor" aria-label="anchor" href="#the-full-matrix"></a>
@@ -455,7 +443,11 @@ grid-cell entry of the matrix above, whatever its granularity:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_map.html">plot_aci_map</a></span><span class="op">(</span><span class="va">matrix_results</span><span class="op">$</span><span class="va">grid_season</span>, variable <span class="op">=</span> <span class="st">"ACI"</span>, time_index <span class="op">=</span> <span class="st">"mean"</span>,</span>
 <span>            borders <span class="op">=</span> <span class="cn">FALSE</span>, title <span class="op">=</span> <span class="st">"Mean seasonal ACI (grid-cell mode)"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="xaci-aggregation-matrix_files/figure-html/unnamed-chunk-10-1.png" alt="Map of the mean seasonal ACI over the synthetic 2x2 grid" width="576"></p>
+<div class="figure">
+<img src="articles/xaci-aggregation-matrix-unnamed-chunk-10-1.png" alt="Map of the mean seasonal ACI over the synthetic 2x2 grid"><p class="caption">
+plot of chunk unnamed-chunk-10
+</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="wrap-up">Wrap-up<a class="anchor" aria-label="anchor" href="#wrap-up"></a>

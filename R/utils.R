@@ -3,6 +3,28 @@
 #' @name utils
 NULL
 
+xaciStartupMessage <- function()
+{
+  msg <- c(paste0(
+    "This is package xaci, version ",
+    utils::packageVersion("xaci")),
+    ". ",
+    "Type 'citation(\"xaci\")' for citing it in publications.",
+    "\n-------------------------------\n",
+    "This work was conducted within the Research Chair DIALog, an initiative by CNP Assurances.\n")
+  return(msg)
+}
+
+.onAttach <- function(lib, pkg)
+{
+  # startup message
+  msg <- xaciStartupMessage()
+  if(!interactive())
+    msg[1] <- paste("Package 'xaci' version", packageVersion("admix"))
+  base::packageStartupMessage(msg)
+  base::invisible()
+}
+
 # Internal lookup table: ISO-3 code -> English country name as expected by
 # rnaturalearth::ne_states(). Only countries relevant to the ACI are listed;
 # extend as needed.

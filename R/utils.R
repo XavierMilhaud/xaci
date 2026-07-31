@@ -20,7 +20,7 @@ xaciStartupMessage <- function()
   # startup message
   msg <- xaciStartupMessage()
   if(!interactive())
-    msg[1] <- paste("Package 'xaci' version", packageVersion("admix"))
+    msg[1] <- paste("Package 'xaci' version", packageVersion("xaci"))
   base::packageStartupMessage(msg)
   base::invisible()
 }

@@ -126,7 +126,7 @@ plots) and a grid-cell version (for the map), exactly as in
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_timeseries.html">plot_aci_timeseries</a></span><span class="op">(</span><span class="va">monthly_national_aci</span>, smooth <span class="op">=</span> <span class="cn">TRUE</span>, span <span class="op">=</span> <span class="fl">0.3</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-4-1.png" alt="plot of chunk unnamed-chunk-4"><div class="figcaption">plot of chunk unnamed-chunk-4</div>
+<img src="xaci-visualization-unnamed-chunk-4-1.png" alt="plot of chunk unnamed-chunk-4"><div class="figcaption">plot of chunk unnamed-chunk-4</div>
 </div>
 <p>With only two years of monthly (24-point) synthetic data the LOESS
 trend line is not very meaningful — with real, multi-decade data it
@@ -141,12 +141,12 @@ series and zero, making positive/negative months visually distinct;
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_components.html">plot_aci_components</a></span><span class="op">(</span><span class="va">monthly_national_aci</span>, type <span class="op">=</span> <span class="st">"bar"</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-5-1.png" alt="plot of chunk unnamed-chunk-5"><div class="figcaption">plot of chunk unnamed-chunk-5</div>
+<img src="xaci-visualization-unnamed-chunk-5-1.png" alt="plot of chunk unnamed-chunk-5"><div class="figcaption">plot of chunk unnamed-chunk-5</div>
 </div>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_components.html">plot_aci_components</a></span><span class="op">(</span><span class="va">monthly_national_aci</span>, type <span class="op">=</span> <span class="st">"stacked"</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-6-1.png" alt="plot of chunk unnamed-chunk-6"><div class="figcaption">plot of chunk unnamed-chunk-6</div>
+<img src="xaci-visualization-unnamed-chunk-6-1.png" alt="plot of chunk unnamed-chunk-6"><div class="figcaption">plot of chunk unnamed-chunk-6</div>
 </div>
 <p><code>components</code> restricts the plot to a subset, e.g.
 <code>plot_aci_components(monthly_national_aci, type = "bar", components = c("t90", "t10"))</code>
@@ -158,12 +158,12 @@ to focus on temperature only.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_distribution.html">plot_aci_distribution</a></span><span class="op">(</span><span class="va">monthly_national_aci</span>, type <span class="op">=</span> <span class="st">"boxplot"</span>, include_aci <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-7-1.png" alt="plot of chunk unnamed-chunk-7"><div class="figcaption">plot of chunk unnamed-chunk-7</div>
+<img src="xaci-visualization-unnamed-chunk-7-1.png" alt="plot of chunk unnamed-chunk-7"><div class="figcaption">plot of chunk unnamed-chunk-7</div>
 </div>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_distribution.html">plot_aci_distribution</a></span><span class="op">(</span><span class="va">monthly_national_aci</span>, type <span class="op">=</span> <span class="st">"violin"</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-8-1.png" alt="plot of chunk unnamed-chunk-8"><div class="figcaption">plot of chunk unnamed-chunk-8</div>
+<img src="xaci-visualization-unnamed-chunk-8-1.png" alt="plot of chunk unnamed-chunk-8"><div class="figcaption">plot of chunk unnamed-chunk-8</div>
 </div>
 <p><code>type = "density"</code> is also available. This is useful to
 compare the spread of each component at a glance, e.g. to spot which one
@@ -182,7 +182,7 @@ above, averaged over the whole study period:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_map.html">plot_aci_map</a></span><span class="op">(</span><span class="va">grid_aci</span>, variable <span class="op">=</span> <span class="st">"ACI"</span>, time_index <span class="op">=</span> <span class="st">"mean"</span>,</span>
 <span>             borders <span class="op">=</span> <span class="cn">FALSE</span>, title <span class="op">=</span> <span class="st">"Mean ACI over the study period"</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-9-1.png" alt="plot of chunk unnamed-chunk-9"><div class="figcaption">plot of chunk unnamed-chunk-9</div>
+<img src="xaci-visualization-unnamed-chunk-9-1.png" alt="plot of chunk unnamed-chunk-9"><div class="figcaption">plot of chunk unnamed-chunk-9</div>
 </div>
 <p><code>borders = TRUE</code> (the default) overlays the country’s
 administrative boundary, downloaded on demand via
@@ -195,7 +195,7 @@ example. In an interactive session with network access, you can drop
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_map.html">plot_aci_map</a></span><span class="op">(</span><span class="va">grid_aci</span>, variable <span class="op">=</span> <span class="st">"t90"</span>, time_index <span class="op">=</span> <span class="fl">6</span>, borders <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-10-1.png" alt="plot of chunk unnamed-chunk-10"><div class="figcaption">plot of chunk unnamed-chunk-10</div>
+<img src="xaci-visualization-unnamed-chunk-10-1.png" alt="plot of chunk unnamed-chunk-10"><div class="figcaption">plot of chunk unnamed-chunk-10</div>
 </div>
 <p>A bare array (e.g. <code>grid_aci$ACI</code> on its own, once it
 carries <code>lon</code>/<code>lat</code> attributes as
@@ -204,7 +204,7 @@ carries <code>lon</code>/<code>lat</code> attributes as
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_aci_map.html">plot_aci_map</a></span><span class="op">(</span><span class="va">grid_aci</span><span class="op">$</span><span class="va">drought</span>, time_index <span class="op">=</span> <span class="st">"mean"</span>, borders <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>             var_label <span class="op">=</span> <span class="st">"Drought anomaly"</span><span class="op">)</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-11-1.png" alt="plot of chunk unnamed-chunk-11"><div class="figcaption">plot of chunk unnamed-chunk-11</div>
+<img src="xaci-visualization-unnamed-chunk-11-1.png" alt="plot of chunk unnamed-chunk-11"><div class="figcaption">plot of chunk unnamed-chunk-11</div>
 </div>
 </div>
 <div class="section level2">
@@ -220,7 +220,7 @@ facets, boxplot and density plots into a single figure. It requires the
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Install the 'patchwork' package to use plot_aci_dashboard()."</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <div class="float">
-<img src="articles/xaci-visualization-unnamed-chunk-12-1.png" alt="plot of chunk unnamed-chunk-12"><div class="figcaption">plot of chunk unnamed-chunk-12</div>
+<img src="xaci-visualization-unnamed-chunk-12-1.png" alt="plot of chunk unnamed-chunk-12"><div class="figcaption">plot of chunk unnamed-chunk-12</div>
 </div>
 </div>
 <div class="section level2">

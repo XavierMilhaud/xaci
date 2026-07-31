@@ -4,9 +4,9 @@
 \name{xaci-package}
 \alias{xaci}
 \alias{xaci-package}
-\title{xaci: Package xaci for Actuarial Climate Index}
+\title{xaci: Actuarial Climate Index}
 \description{
-Computes the Actuarial Climate Index (ACI) and its components (temperature, precipitation, drought, wind, sea level) from gridded climate data (NetCDF) and tide gauge records. Implements the methodology described in Garrido, Milhaud & Olympio (2025) \url{https://hal.science/hal-04491982v2} for a French/European actuarial climate index, building on the American Academy of Actuaries framework.
+Computes the Actuarial Climate Index (ACI) and its components (temperature, precipitation, drought, wind, sea level) from gridded climate data ('NetCDF') and tide gauge records. Implements the methodology described in Garrido, Milhaud & Olympio (2025) \url{https://hal.science/hal-04491982v2} for a French/European actuarial climate index, building on the American Academy of Actuaries framework, to any country in the world.
 }
 \seealso{
 Useful links:

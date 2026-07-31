@@ -7,10 +7,18 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4,
+  fig.path = "vignettes/figures-xaci-components/",
+  echo = TRUE
+)
+```
 
-
-
-``` r
+```{r setup}
 library(xaci)
 ```
 
@@ -29,8 +37,7 @@ network access required. We use the first three years (2011-2013) as the
 period**: this matters for what the standardised output looks like, see the
 note right after the data are generated below.
 
-
-``` r
+```{r}
 build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
   time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
   dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
@@ -143,8 +150,7 @@ Both the hot-day frequency ($T_{90}$) and the cold-night frequency
 ($T_{10}$) come from the same function, called twice with different
 `percentile` / `extremum` / `above_thresholds` arguments:
 
-
-``` r
+```{r}
 t90 <- temperature_component(
   temperature_data_path = t2m_file,
   country_abbrev         = country_abbrev,
@@ -166,17 +172,9 @@ t10 <- temperature_component(
 )
 
 head(t90, 3)   # inside reference_period (2011-2013): reflects the data
-#> 2011-01-01 2011-02-01 2011-03-01 
-#> -0.9149914 -0.9743106 -0.8320503
 tail(t90, 3)   # 2014, outside reference_period: genuine anomalies
-#> 2014-10-01 2014-11-01 2014-12-01 
-#>   2.044340   1.236330   1.585021
 head(t10, 3)
-#> 2011-01-01 2011-02-01 2011-03-01 
-#>  0.8992058  0.9424617  0.9635368
 tail(t10, 3)
-#> 2014-10-01 2014-11-01 2014-12-01 
-#>  -1.999621  -1.826386  -1.225086
 ```
 
 Internally, `temperature_component()` averages a "day" half and a "night"
@@ -188,8 +186,7 @@ percentile, then counts (monthly) how often each day/night crosses it.
 The precipitation component is the maximum 5-day sliding sum of
 precipitation, standardised against the reference period:
 
-
-``` r
+```{r}
 prec <- precipitation_component(
   precipitation_data_path = tp_file,
   country_abbrev           = country_abbrev,
@@ -202,11 +199,7 @@ prec <- precipitation_component(
 )
 
 head(prec, 3)
-#> 2011-01-01 2011-02-01 2011-03-01 
-#>  1.1428345  0.9358717  1.1215291
 tail(prec, 3)
-#> 2014-10-01 2014-11-01 2014-12-01 
-#>  -2.496143  -1.857892  -1.149866
 ```
 
 ## Drought: `drought_component()`
@@ -214,8 +207,7 @@ tail(prec, 3)
 The drought component is based on the maximum number of **consecutive dry
 days (CDD)** per year, interpolated to monthly resolution and standardised:
 
-
-``` r
+```{r}
 drought <- drought_component(
   precipitation_data_path = tp_file,
   country_abbrev           = country_abbrev,
@@ -226,11 +218,7 @@ drought <- drought_component(
 )
 
 head(drought, 3)
-#> 2011-01-01 2011-02-01 2011-03-01 
-#> -0.9506522 -1.0762085 -1.1529024
 tail(drought, 3)
-#> 2014-10-01 2014-11-01 2014-12-01 
-#>   1.529558   1.279779   1.080634
 ```
 
 ## Wind: `wind_component()`
@@ -238,8 +226,7 @@ tail(drought, 3)
 The wind component measures how often wind power (derived from the `u10`
 and `v10` components) exceeds its reference-period 90th percentile:
 
-
-``` r
+```{r}
 wind <- wind_component(
   wind_u10_data_path = u10_file,
   wind_v10_data_path = v10_file,
@@ -251,11 +238,7 @@ wind <- wind_component(
 )
 
 head(wind, 3)
-#> 2011-01-01 2011-02-01 2011-03-01 
-#>          0          0          0
 tail(wind, 3)
-#> 2014-10-01 2014-11-01 2014-12-01 
-#>  0.1971326  0.2370370  0.2365591
 ```
 
 ## Sea level: `sealevel_component()`
@@ -276,21 +259,12 @@ than 1: with a single reference year, sea-level standardisation would divide
 by an undefined (`NA`) per-month standard deviation, and — after that `NA`
 propagates through every standardised value — return an empty result.
 
-
-``` r
+```{r}
 psmsl_meta <- load_psmsl_data()
 brest     <- psmsl_meta[psmsl_meta$ID == 1, ]
 marseille <- psmsl_meta[psmsl_meta$ID == 61, ]
 brest[, c("Station Name", "ID", "lat", "lon", "Country")]
-#> # A tibble: 1 × 5
-#>   `Station Name`    ID   lat   lon Country
-#>   <chr>          <dbl> <dbl> <dbl> <chr>  
-#> 1 BREST              1  48.4 -4.50 FRA
 marseille[, c("Station Name", "ID", "lat", "lon", "Country")]
-#> # A tibble: 1 × 5
-#>   `Station Name`    ID   lat   lon Country
-#>   <chr>          <dbl> <dbl> <dbl> <chr>  
-#> 1 MARSEILLE         61  43.3  5.35 FRA
 
 # PSMSL encodes the month as a year fraction (see ?sealevel_correct_date_format)
 month_frac <- c("0417", "125", "2083", "2917", "375", "4583",
@@ -323,15 +297,7 @@ sealevel_national <- sealevel_component(
 )
 
 head(sealevel_national, 3)   # inside reference_period (2011-2013)
-#>              sealevel
-#> 2011-01-01 -1.1529915
-#> 2011-02-01  0.3086872
-#> 2011-03-01  0.8661490
 tail(sealevel_national, 3)   # 2014, outside reference_period: genuine anomalies
-#>               sealevel
-#> 2014-10-01 -1.55288664
-#> 2014-11-01  1.28824360
-#> 2014-12-01  0.09876605
 ```
 
 `sealevel_component()` also has a grid-cell mode (`area = FALSE`), which
@@ -339,8 +305,7 @@ inverse-distance-weight-interpolates the station anomalies onto an ERA5
 grid — this is what `calculate_aci()` uses internally when producing
 grid-cell (mapping) output:
 
-
-``` r
+```{r}
 sealevel_grid <- sealevel_component(
   country_abbrev  = "FRA",
   study_period     = study_period,
@@ -358,7 +323,6 @@ sealevel_grid <- sealevel_component(
 )
 
 dim(sealevel_grid$data)
-#> [1]  3  3 48
 ```
 
 ## Caching heavy computations (steps 3-4)
@@ -368,8 +332,7 @@ Pass `save = TRUE` once to cache the result to disk, then
 `computed_components = TRUE` on subsequent calls to reload it instantly —
 this is exactly what `calculate_aci()` does internally:
 
-
-``` r
+```{r, eval = FALSE}
 precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   country_abbrev           = "FRA",
@@ -397,4 +360,7 @@ prec_national <- precipitation_component(
 The next vignette, `vignette("xaci-full-pipeline")`, shows how
 `calculate_aci()` combines all six components above into the index itself.
 
-
+```{r, include = FALSE}
+unlink(c(t2m_file, tp_file, u10_file, v10_file, mask_file))
+unlink(psmsl_dir, recursive = TRUE)
+```

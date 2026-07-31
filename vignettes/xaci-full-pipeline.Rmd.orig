@@ -7,10 +7,18 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4,
+  fig.path = "vignettes/figures-xaci-full-pipeline/",
+  echo = TRUE
+)
+```
 
-
-
-``` r
+```{r setup}
 library(xaci)
 ```
 
@@ -22,8 +30,7 @@ and explains the shape of its output.
 
 ## Building the synthetic dataset
 
-
-``` r
+```{r}
 build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
   time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
   dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
@@ -140,8 +147,7 @@ With explicit `*_data_path` arguments, `calculate_aci()` skips the
 ERA5-path-building step (normally driven by `years`) and goes straight to
 computing every component, then combining them:
 
-
-``` r
+```{r, message = FALSE}
 monthly_national_aci <- calculate_aci(
   country_abbrev           = "FRA",
   study_period               = study_period,
@@ -161,15 +167,7 @@ monthly_national_aci <- calculate_aci(
 )
 
 head(monthly_national_aci, 3)   # inside reference_period (2011-2013)
-#>           drought wind precipitation       t10        t90   sealevel        ACI
-#> 2011-01 -1.037071    0     0.2090946 0.8899792 -0.8430475 -0.5283510 -0.5128218
-#> 2011-02 -1.039315    0     0.7125336 1.0498105 -0.9059700  0.9525916 -0.4023162
-#> 2011-03 -1.041648    0     0.4047044 0.9271726 -1.0545163 -0.5195323 -0.5235652
 tail(monthly_national_aci, 3)   # 2014, outside reference_period
-#>           drought      wind precipitation       t10      t90   sealevel       ACI
-#> 2014-10 1.0449282 0.2293907     -1.765073 -3.092075 1.334810 -0.4112348 0.7411315
-#> 2014-11 0.9819440 0.2185185     -2.073301 -1.403643 1.668883 23.7643976 1.3370322
-#> 2014-12 0.9149914 0.2007168     -1.883702 -1.183858 1.960784 -3.1812422 0.3346922
 ```
 
 ## Reading the output
@@ -178,12 +176,9 @@ For national, monthly output, `calculate_aci()` returns a `data.frame` with
 one row per month (`"YYYY-MM"` row names) and one column per component plus
 `ACI` itself:
 
-
-``` r
+```{r}
 colnames(monthly_national_aci)
-#> [1] "drought"       "wind"          "precipitation" "t10"           "t90"           "sealevel"      "ACI"
 class(monthly_national_aci)
-#> [1] "data.frame"
 ```
 
 Each component column is a standardised anomaly (roughly, number of
@@ -200,8 +195,7 @@ is best done via the `save` / `computed_components` caching pattern shown in
 `vignette("xaci-components")`; here, for the small synthetic example, we
 simply call `calculate_aci()` again:
 
-
-``` r
+```{r, message = FALSE}
 seasonal_national_aci <- calculate_aci(
   country_abbrev           = "FRA",
   study_period               = study_period,
@@ -217,24 +211,6 @@ seasonal_national_aci <- calculate_aci(
 )
 
 seasonal_national_aci
-#>              drought      wind precipitation          t10         t90    sealevel         ACI
-#> 2011-DJF -1.03819317 0.0000000    0.46081409  0.969894853 -0.87450877  0.21212035 -0.45756897
-#> 2011-JJA -1.05199807 0.0000000    0.25351878  1.108970234 -1.01137077 -0.01068346 -0.56172250
-#> 2011-MAM -1.04410644 0.0000000    0.74793613  1.010036731 -1.07520863 -0.06092608 -0.46030786
-#> 2011-SON -1.06092614 0.0000000    0.23764905  0.951405025 -0.96584416 -0.98209795 -0.56479728
-#> 2012-DJF -0.30158844 0.0000000    0.74026939  0.297286437 -0.47628068 -0.54686923 -0.08543462
-#> 2012-JJA  0.11374658 0.0000000    0.03022988 -0.499934012  0.50022588 -0.35847384  0.20623877
-#> 2012-MAM  0.09501163 0.0000000    0.08630348 -0.040987960  0.25528758  0.22676501  0.10056609
-#> 2012-SON  0.13575482 0.0000000   -0.03836602  0.003980472  0.03965165  0.20567830  0.03349916
-#> 2013-DJF  0.68872008 0.0000000   -0.69087648 -0.571106166  0.72595319  0.31860023  0.26127365
-#> 2013-JJA  0.93825149 0.0000000   -0.28374866 -0.609036222  0.51114490  0.36915730  0.35548373
-#> 2013-MAM  0.94909481 0.0000000   -0.83423960 -0.969048771  0.81992105 -0.16583893  0.35974178
-#> 2013-SON  0.92517132 0.0000000   -0.19928304 -0.955385496  0.92619251  0.77641966  0.53129812
-#> 2014-DJF  1.27763927 0.1331712   -1.68680186 -1.205350954  1.51899049  1.26086507  0.51933136
-#> 2014-JJA  1.21229289 0.2163282   -3.08625290 -3.170720717  3.87861529  5.99626705  1.26749184
-#> 2014-MAM  1.35519305 0.2186778   -0.82412900 -1.785200078  2.61115904  0.75944621  1.01884428
-#> 2014-SON  1.04371673 0.2258463   -1.61425154 -2.319881289  1.78284039  8.20681539  1.03834543
-#> 2015-DJF  0.91499142 0.2007168   -1.88370235 -1.183857700  1.96078431 -3.18124219  0.33469221
 ```
 
 ## Grid-cell mode: output for mapping
@@ -244,8 +220,7 @@ mode**: instead of a national scalar per month, you get the full spatial
 field for each component and for `ACI` itself, ready for mapping (see
 `vignette("xaci-visualization")`):
 
-
-``` r
+```{r, message = FALSE}
 grid_aci <- calculate_aci(
   country_abbrev           = "FRA",
   study_period               = study_period,
@@ -265,10 +240,7 @@ grid_aci <- calculate_aci(
 )
 
 names(grid_aci)
-#>  [1] "lon"           "lat"           "ACI"           "t90"           "t10"           "precipitation" "drought"      
-#>  [8] "wind"          "sealevel"      "time"
 dim(grid_aci$ACI)   # [lon x lat x time]
-#> [1]  3  3 48
 ```
 
 `grid_aci$lon` / `grid_aci$lat` are the coordinate vectors, `grid_aci$time`
@@ -281,4 +253,7 @@ For aggregation at the level of administrative units (e.g. French
 departments) instead of nationally or on the raw grid, see
 `vignette("xaci-admin-levels")`.
 
-
+```{r, include = FALSE}
+unlink(c(t2m_file, tp_file, u10_file, v10_file, mask_file))
+unlink(psmsl_dir, recursive = TRUE)
+```

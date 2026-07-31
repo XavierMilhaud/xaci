@@ -1,5 +1,5 @@
 Package: xaci
-Title: Package xaci for Actuarial Climate Index
+Title: Actuarial Climate Index
 Version: 0.1.0
 Authors@R: c(
     person("Xavier", "Milhaud", , "xavier.milhaud.research@gmail.com", role = c("aut", "cre", "ctb")),
@@ -8,10 +8,10 @@ Authors@R: c(
   )
 Description: Computes the Actuarial Climate Index (ACI) and its components
     (temperature, precipitation, drought, wind, sea level) from gridded climate
-    data (NetCDF) and tide gauge records. Implements the methodology described
+    data ('NetCDF') and tide gauge records. Implements the methodology described
     in Garrido, Milhaud & Olympio (2025) <https://hal.science/hal-04491982v2>
     for a French/European actuarial climate index, building on the American 
-    Academy of Actuaries framework.
+    Academy of Actuaries framework, to any country in the world.
 License: MIT + file LICENSE
 URL: https://github.com/XavierMilhaud/xaci
 BugReports: https://github.com/XavierMilhaud/xaci/issues

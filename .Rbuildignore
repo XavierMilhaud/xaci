@@ -8,3 +8,5 @@
 ^results$
 ^doc$
 ^Meta$
+^vignettes/.*\.orig$
+^vignettes/precompile\.R$

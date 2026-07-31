@@ -7,10 +7,18 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 4,
+  fig.path = "vignettes/figures-xaci-admin-levels/",
+  echo = TRUE
+)
+```
 
-
-
-``` r
+```{r setup}
 library(xaci)
 ```
 
@@ -39,8 +47,7 @@ fetched over the network the first time they are needed:
 Both of these require network access and are therefore **not run** in this
 vignette. In an interactive session, the call looks like this:
 
-
-``` r
+```{r, eval = FALSE}
 admin_mask_L1 <- build_admin_mask(
   lon = grid_aci$lon, lat = grid_aci$lat,
   country_abbrev = "FRA", admin_level = 1, crs_metric = 2154   # Lambert-93
@@ -70,8 +77,7 @@ Passing `admin_mask` (and, for sea level, `admin_assignment`) explicitly to
 an individual component avoids rebuilding it on every call — useful when
 computing several components for the same country/level:
 
-
-``` r
+```{r, eval = FALSE}
 prec_admin_L1 <- precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   country_abbrev            = "FRA",
@@ -96,8 +102,7 @@ package's own test suite does to keep tests network-free.
 
 ### A synthetic two-region country
 
-
-``` r
+```{r}
 lon <- c(-1, 0)
 lat <- c(43, 44)
 
@@ -122,8 +127,7 @@ We reuse a small synthetic temperature component (built as in
 `reduce_dataarray_to_dataframe()` — the same function `calculate_aci()`
 calls internally once `admin_mask` is known:
 
-
-``` r
+```{r}
 build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
   time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
   nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
@@ -182,15 +186,7 @@ t90_grid <- temperature_component(
 )
 
 head(t90_grid, 3)   # inside reference_period (2011-2013)
-#>                 t90_A      t90_B
-#> 2011-01-01 -0.7823697 -0.9558920
-#> 2011-02-01 -0.6112760 -0.7125328
-#> 2011-03-01 -0.7296229 -0.5299002
 tail(t90_grid, 3)   # 2014, outside reference_period: genuine anomalies
-#>               t90_A     t90_B
-#> 2014-10-01 2.672668 0.7958107
-#> 2014-11-01 4.458087 0.7962436
-#> 2014-12-01 2.198950 1.5060550
 ```
 
 `temperature_component()` returned one column per region directly, because
@@ -208,8 +204,7 @@ be built by hand the same way, using real PSMSL station IDs (see
 `vignette("xaci-components")` for how to generate synthetic tide-gauge
 `.txt` files for these):
 
-
-``` r
+```{r}
 synthetic_admin_assignment <- list(
   station_ids = list(A = 1, B = 61),      # PSMSL IDs: Brest -> A, Marseille -> B
   factors     = c(A = 0.6, B = 0.3)       # coastal fraction per region
@@ -223,4 +218,6 @@ drives `reduce_sealevel_over_region()` to produce one `sealevel_A` /
 `reduce_dataarray_to_dataframe()` above but on tide-gauge station data
 instead of a spatial grid.
 
-
+```{r, include = FALSE}
+unlink(t2m_file)
+```

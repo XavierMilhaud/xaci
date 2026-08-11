@@ -40,9 +40,22 @@ optionally the global ACI) as \strong{boxplots} (\code{type = "boxplot"}),
 \strong{density curves} (\code{type = "density"}).
 }
 \examples{
-\dontrun{
-plot_aci_distribution(result, type = "violin")
-plot_aci_distribution(result, type = "density")
-}
+# Toy monthly ACI data.frame (see plot_aci_timeseries() for details)
+n     <- 60L
+dates <- format(seq(as.Date("2015-01-01"), by = "month", length.out = n),
+                "\%Y-\%m")
+aci_df <- data.frame(
+  t90           = 20 + stats::rnorm(n, sd = 2),
+  t10           = 5  + stats::rnorm(n, sd = 2),
+  precipitation = stats::rnorm(n, sd = 1),
+  drought       = stats::rnorm(n, sd = 1),
+  wind          = stats::rnorm(n, sd = 1),
+  sealevel      = stats::rnorm(n, sd = 1),
+  row.names     = dates
+)
+aci_df$ACI <- with(aci_df, (t90 - t10 + precipitation + drought +
+                               wind + sealevel) / 5)
+plot_aci_distribution(aci_df, type = "violin")
+plot_aci_distribution(aci_df, type = "density")
 
 }

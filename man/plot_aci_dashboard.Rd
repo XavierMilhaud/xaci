@@ -20,8 +20,21 @@ density) into a single patchwork figure.  Requires the \pkg{patchwork}
 package to be installed.
 }
 \examples{
-\dontrun{
-plot_aci_dashboard(result)
-}
+# Toy monthly ACI data.frame (see plot_aci_timeseries() for details)
+n     <- 60L
+dates <- format(seq(as.Date("2015-01-01"), by = "month", length.out = n),
+                "\%Y-\%m")
+aci_df <- data.frame(
+  t90           = 20 + stats::rnorm(n, sd = 2),
+  t10           = 5  + stats::rnorm(n, sd = 2),
+  precipitation = stats::rnorm(n, sd = 1),
+  drought       = stats::rnorm(n, sd = 1),
+  wind          = stats::rnorm(n, sd = 1),
+  sealevel      = stats::rnorm(n, sd = 1),
+  row.names     = dates
+)
+aci_df$ACI <- with(aci_df, (t90 - t10 + precipitation + drought +
+                               wind + sealevel) / 5)
+plot_aci_dashboard(aci_df)
 
 }

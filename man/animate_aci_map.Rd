@@ -65,11 +65,26 @@ Produces a GIF animation (via \pkg{gganimate}) showing the evolution of
 a spatial variable at each time step. Requires \pkg{gganimate} and
 \pkg{gifski} (or \pkg{png}) to be installed.
 }
+\section{Why \code{dontrun}}{
+
+This example is wrapped in \code{dontrun} because it depends on the
+optional \pkg{gganimate} and \pkg{gifski} packages (declared in
+\code{Suggests}, not guaranteed to be installed on every machine
+running \code{R CMD check}), and because rendering a multi-frame GIF
+takes well over 5 seconds, making it unsuitable for \code{donttest} as
+well.
+}
+
 \examples{
 \dontrun{
-grid <- calculate_aci(..., area = FALSE)
+lon <- seq(-5, 8, length.out = 10)
+lat <- seq(42, 51, length.out = 8)
+arr <- array(stats::rnorm(10 * 8 * 5), dim = c(10, 8, 5))
+grid <- list(ACI = arr, lon = lon, lat = lat,
+            time = seq_len(5))
+
 animate_aci_map(grid, variable = "ACI", country_abbrev = "FRA",
-                fps = 2, save_path = "aci_animation.gif")
+                fps = 2, save_path = file.path(tempdir(), "aci_animation.gif"))
 }
 
 }

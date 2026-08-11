@@ -531,10 +531,23 @@ plot_aci_components <- function(aci_df,
 #' @return A \code{ggplot} object.
 #'
 #' @examples
-#' \dontrun{
-#' plot_aci_distribution(result, type = "violin")
-#' plot_aci_distribution(result, type = "density")
-#' }
+#' # Toy monthly ACI data.frame (see plot_aci_timeseries() for details)
+#' n     <- 60L
+#' dates <- format(seq(as.Date("2015-01-01"), by = "month", length.out = n),
+#'                 "%Y-%m")
+#' aci_df <- data.frame(
+#'   t90           = 20 + stats::rnorm(n, sd = 2),
+#'   t10           = 5  + stats::rnorm(n, sd = 2),
+#'   precipitation = stats::rnorm(n, sd = 1),
+#'   drought       = stats::rnorm(n, sd = 1),
+#'   wind          = stats::rnorm(n, sd = 1),
+#'   sealevel      = stats::rnorm(n, sd = 1),
+#'   row.names     = dates
+#' )
+#' aci_df$ACI <- with(aci_df, (t90 - t10 + precipitation + drought +
+#'                                wind + sealevel) / 5)
+#' plot_aci_distribution(aci_df, type = "violin")
+#' plot_aci_distribution(aci_df, type = "density")
 #'
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_violin geom_jitter
 #'   geom_density scale_fill_manual scale_colour_manual scale_x_discrete
@@ -635,9 +648,22 @@ plot_aci_distribution <- function(aci_df,
 #' @return A \pkg{patchwork} object (inherits from \code{ggplot}).
 #'
 #' @examples
-#' \dontrun{
-#' plot_aci_dashboard(result)
-#' }
+#' # Toy monthly ACI data.frame (see plot_aci_timeseries() for details)
+#' n     <- 60L
+#' dates <- format(seq(as.Date("2015-01-01"), by = "month", length.out = n),
+#'                 "%Y-%m")
+#' aci_df <- data.frame(
+#'   t90           = 20 + stats::rnorm(n, sd = 2),
+#'   t10           = 5  + stats::rnorm(n, sd = 2),
+#'   precipitation = stats::rnorm(n, sd = 1),
+#'   drought       = stats::rnorm(n, sd = 1),
+#'   wind          = stats::rnorm(n, sd = 1),
+#'   sealevel      = stats::rnorm(n, sd = 1),
+#'   row.names     = dates
+#' )
+#' aci_df$ACI <- with(aci_df, (t90 - t10 + precipitation + drought +
+#'                                wind + sealevel) / 5)
+#' plot_aci_dashboard(aci_df)
 #'
 #' @export
 plot_aci_dashboard <- function(aci_df,
@@ -721,18 +747,45 @@ plot_aci_dashboard <- function(aci_df,
 #'
 #' @return A \code{ggplot} object.
 #'
+#' @section Offline vs. online examples:
+#' The first two examples below use a small synthetic 10x8x5
+#' (lon x lat x time) grid and run offline (\code{borders = FALSE}).
+#' Overlaying administrative borders, or plotting an admin-level
+#' choropleth, additionally requires downloading boundary polygons via
+#' \code{geodata::gadm()} and therefore a working internet connection; the
+#' corresponding examples are wrapped in \code{dontrun} and not run
+#' automatically by \code{R CMD check}.
+#'
 #' @examples
-#' \dontrun{
-#' grid <- calculate_aci(..., area = FALSE)
+#' lon <- seq(-5, 8, length.out = 10)
+#' lat <- seq(42, 51, length.out = 8)
+#' arr <- array(stats::rnorm(10 * 8 * 5), dim = c(10, 8, 5))
+#' arr <- structure(arr, lon = lon, lat = lat,
+#'                   time = seq_len(5), country_abbrev = "FRA")
 #'
 #' # Bare array, self-describing thanks to its attributes
-#' plot_aci_map(grid$t90, time_index = "mean")
+#' plot_aci_map(arr, time_index = "mean", borders = FALSE)
 #'
 #' # Equivalent, via the parent list and `variable`
-#' plot_aci_map(grid, variable = "t90", time_index = "mean")
+#' grid <- list(t90 = arr, lon = lon, lat = lat, time = seq_len(5))
+#' plot_aci_map(grid, variable = "t90", time_index = 1, borders = FALSE)
 #'
-#' # Admin choropleth: country_abbrev/admin_level read from attributes
-#' admin <- calculate_aci(..., admin_level = 1)
+#' \dontrun{
+#' plot_aci_map(arr, time_index = "mean", country_abbrev = "FRA")
+#'
+#' admin <- calculate_aci(
+#'   temperature_data_path   = "t2m_1960-2020.nc",
+#'   precipitation_data_path = "tp_1960-2020.nc",
+#'   wind_u10_data_path      = "u10_1960-2020.nc",
+#'   wind_v10_data_path      = "v10_1960-2020.nc",
+#'   country_abbrev          = "FRA",
+#'   mask_data_path          = "mask_FRA.nc",
+#'   study_period            = c("1961-01-01", "2020-12-31"),
+#'   reference_period        = c("1961-01-01", "1990-12-31"),
+#'   granularity             = "year",
+#'   area                    = FALSE,
+#'   admin_level             = 1
+#' )
 #' plot_aci_map(admin, variable = "ACI", time_index = 1)
 #' }
 #'
@@ -946,11 +999,24 @@ plot_aci_map_mean <- function(data,
 #'
 #' @return A \pkg{gganimate} animation object (invisibly).
 #'
+#' @section Why \code{dontrun}:
+#' This example is wrapped in \code{dontrun} because it depends on the
+#' optional \pkg{gganimate} and \pkg{gifski} packages (declared in
+#' \code{Suggests}, not guaranteed to be installed on every machine
+#' running \code{R CMD check}), and because rendering a multi-frame GIF
+#' takes well over 5 seconds, making it unsuitable for \code{donttest} as
+#' well.
+#'
 #' @examples
 #' \dontrun{
-#' grid <- calculate_aci(..., area = FALSE)
+#' lon <- seq(-5, 8, length.out = 10)
+#' lat <- seq(42, 51, length.out = 8)
+#' arr <- array(stats::rnorm(10 * 8 * 5), dim = c(10, 8, 5))
+#' grid <- list(ACI = arr, lon = lon, lat = lat,
+#'             time = seq_len(5))
+#'
 #' animate_aci_map(grid, variable = "ACI", country_abbrev = "FRA",
-#'                 fps = 2, save_path = "aci_animation.gif")
+#'                 fps = 2, save_path = file.path(tempdir(), "aci_animation.gif"))
 #' }
 #'
 #' @importFrom ggplot2 ggplot aes geom_raster geom_sf labs

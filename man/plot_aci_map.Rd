@@ -86,18 +86,47 @@ by \code{calculate_aci()} (grid-cell, admin level 1, admin level 2, ...):
     from the data.frame's attributes when not supplied explicitly.
 }
 }
+\section{Offline vs. online examples}{
+
+The first two examples below use a small synthetic 10x8x5
+(lon x lat x time) grid and run offline (\code{borders = FALSE}).
+Overlaying administrative borders, or plotting an admin-level
+choropleth, additionally requires downloading boundary polygons via
+\code{geodata::gadm()} and therefore a working internet connection; the
+corresponding examples are wrapped in \code{dontrun} and not run
+automatically by \code{R CMD check}.
+}
+
 \examples{
-\dontrun{
-grid <- calculate_aci(..., area = FALSE)
+lon <- seq(-5, 8, length.out = 10)
+lat <- seq(42, 51, length.out = 8)
+arr <- array(stats::rnorm(10 * 8 * 5), dim = c(10, 8, 5))
+arr <- structure(arr, lon = lon, lat = lat,
+                  time = seq_len(5), country_abbrev = "FRA")
 
 # Bare array, self-describing thanks to its attributes
-plot_aci_map(grid$t90, time_index = "mean")
+plot_aci_map(arr, time_index = "mean", borders = FALSE)
 
 # Equivalent, via the parent list and `variable`
-plot_aci_map(grid, variable = "t90", time_index = "mean")
+grid <- list(t90 = arr, lon = lon, lat = lat, time = seq_len(5))
+plot_aci_map(grid, variable = "t90", time_index = 1, borders = FALSE)
 
-# Admin choropleth: country_abbrev/admin_level read from attributes
-admin <- calculate_aci(..., admin_level = 1)
+\dontrun{
+plot_aci_map(arr, time_index = "mean", country_abbrev = "FRA")
+
+admin <- calculate_aci(
+  temperature_data_path   = "t2m_1960-2020.nc",
+  precipitation_data_path = "tp_1960-2020.nc",
+  wind_u10_data_path      = "u10_1960-2020.nc",
+  wind_v10_data_path      = "v10_1960-2020.nc",
+  country_abbrev          = "FRA",
+  mask_data_path          = "mask_FRA.nc",
+  study_period            = c("1961-01-01", "2020-12-31"),
+  reference_period        = c("1961-01-01", "1990-12-31"),
+  granularity             = "year",
+  area                    = FALSE,
+  admin_level             = 1
+)
 plot_aci_map(admin, variable = "ACI", time_index = 1)
 }
 

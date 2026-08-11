@@ -189,20 +189,52 @@ match it instead.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>ggplot</code> object.</p>
     </div>
+    <div class="section level2">
+    <h2 id="offline-vs-online-examples">Offline vs. online examples<a class="anchor" aria-label="anchor" href="#offline-vs-online-examples"></a></h2>
+
+
+<p>The first two examples below use a small synthetic 10x8x5
+(lon x lat x time) grid and run offline (<code>borders = FALSE</code>).
+Overlaying administrative borders, or plotting an admin-level
+choropleth, additionally requires downloading boundary polygons via
+<code><a href="https://rspatial.github.io/geodata/reference/gadm.html" class="external-link">geodata::gadm()</a></code> and therefore a working internet connection; the
+corresponding examples are wrapped in <code>dontrun</code> and not run
+automatically by <code>R CMD check</code>.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="calculate_aci.html">calculate_aci</a></span><span class="op">(</span><span class="va">...</span>, area <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">lon</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="op">-</span><span class="fl">5</span>, <span class="fl">8</span>, length.out <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">lat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">42</span>, <span class="fl">51</span>, length.out <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">arr</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/array.html" class="external-link">array</a></span><span class="op">(</span><span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">10</span> <span class="op">*</span> <span class="fl">8</span> <span class="op">*</span> <span class="fl">5</span><span class="op">)</span>, dim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">8</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">arr</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/structure.html" class="external-link">structure</a></span><span class="op">(</span><span class="va">arr</span>, lon <span class="op">=</span> <span class="va">lon</span>, lat <span class="op">=</span> <span class="va">lat</span>,</span></span>
+<span class="r-in"><span>                  time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span>, country_abbrev <span class="op">=</span> <span class="st">"FRA"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Bare array, self-describing thanks to its attributes</span></span></span>
-<span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="va">t90</span>, time_index <span class="op">=</span> <span class="st">"mean"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">arr</span>, time_index <span class="op">=</span> <span class="st">"mean"</span>, borders <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="plot_aci_map-1.png" alt="" width="700" height="433"></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Equivalent, via the parent list and `variable`</span></span></span>
-<span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">grid</span>, variable <span class="op">=</span> <span class="st">"t90"</span>, time_index <span class="op">=</span> <span class="st">"mean"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>t90 <span class="op">=</span> <span class="va">arr</span>, lon <span class="op">=</span> <span class="va">lon</span>, lat <span class="op">=</span> <span class="va">lat</span>, time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">grid</span>, variable <span class="op">=</span> <span class="st">"t90"</span>, time_index <span class="op">=</span> <span class="fl">1</span>, borders <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="plot_aci_map-2.png" alt="" width="700" height="433"></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Admin choropleth: country_abbrev/admin_level read from attributes</span></span></span>
-<span class="r-in"><span><span class="va">admin</span> <span class="op">&lt;-</span> <span class="fu"><a href="calculate_aci.html">calculate_aci</a></span><span class="op">(</span><span class="va">...</span>, admin_level <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+<span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">arr</span>, time_index <span class="op">=</span> <span class="st">"mean"</span>, country_abbrev <span class="op">=</span> <span class="st">"FRA"</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">admin</span> <span class="op">&lt;-</span> <span class="fu"><a href="calculate_aci.html">calculate_aci</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"t2m_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"tp_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"u10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"v10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  country_abbrev          <span class="op">=</span> <span class="st">"FRA"</span>,</span></span>
+<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"mask_FRA.nc"</span>,</span></span>
+<span class="r-in"><span>  study_period            <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"2020-12-31"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  reference_period        <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"1990-12-31"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  granularity             <span class="op">=</span> <span class="st">"year"</span>,</span></span>
+<span class="r-in"><span>  area                    <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
+<span class="r-in"><span>  admin_level             <span class="op">=</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">plot_aci_map</span><span class="op">(</span><span class="va">admin</span>, variable <span class="op">=</span> <span class="st">"ACI"</span>, time_index <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>

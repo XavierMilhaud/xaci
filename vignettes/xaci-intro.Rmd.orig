@@ -57,7 +57,7 @@ step 4 is the fast, repeatable step used for day-to-day exploration.
 ```
 Step 1 (long)   Step 2 (short)   Step 3 (long)              Step 4 (fast, repeatable)
 ERA5 download → Country mask  → Grid-cell components     →  ACI / components at any
-(data/)          (data/)         (results/, cached .rds)     temporal & spatial level
+(cache dir)      (cache dir)     (cache dir, .rds)           temporal & spatial level
 ```
 
 * **Step 1** downloads the four required ERA5 variables (`t2m`, `tp`, `u10`,
@@ -77,24 +77,41 @@ individually with `temperature_component()`, `precipitation_component()`,
 `drought_component()`, `wind_component()` and `sealevel_component()`. This
 is covered in detail in `vignette("xaci-components")`.
 
-Because step 1 requires network access and a personal CDS token, it cannot
-be demonstrated inside a vignette. Here is the shape of the call you would
-use with your own data:
+### Where things get cached
+
+Steps 1-3 all write to disk, via a `dest_dir` (download functions) or
+`save_dir` (component functions) argument. In every case, this argument
+defaults to `NULL`, which resolves to a sub-directory of `tempdir()` — safe,
+zero-config, and cleared automatically at the end of the R session, in line
+with CRAN policy (packages must not write to the user's home filespace by
+default).
+
+Since the whole point of steps 1-3 is to avoid repeating long computations,
+you will usually want a directory that **persists** across sessions instead.
+Pass your own path explicitly; `tools::R_user_dir("xaci", which = "data")`
+is a convenient, per-user location that works well for this (it is what
+`xaci` itself uses internally to cache administrative boundaries). Because
+step 1 requires network access and a personal CDS token, it cannot be
+demonstrated inside a vignette; here is the shape of the call you would use
+with your own data:
 
 ```{r, eval = FALSE}
 library(ecmwfr)
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
+data_dir <- tools::R_user_dir("xaci", which = "data")
+
 download_era5_all(
   years          = 2010:2020,
   area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
-  country_abbrev = "FRA"
+  country_abbrev = "FRA",
+  dest_dir       = data_dir
 )
 
 download_mask(
   country_abbrev = "FRA",
   area           = c(51.5, -5.5, 41.0, 10.0),
-  dest_dir       = "data/era5/FRA"
+  dest_dir       = data_dir
 )
 ```
 

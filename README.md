@@ -96,7 +96,7 @@ explanation and a first worked example, and `vignette("xaci-components")` /
 ```
 Step 1 (long)   Step 2 (short)   Step 3 (long)              Step 4 (fast, repeatable)
 ERA5 download → Country mask  → Grid-cell components     →  ACI / components at any
-(data/)          (data/)         (results/, cached .rds)     temporal & spatial level
+(cache dir)      (cache dir)     (cache dir, .rds)           temporal & spatial level
 ```
 
 * **Step 1** downloads the four required ERA5 variables (`t2m`, `tp`, `u10`,
@@ -104,23 +104,40 @@ ERA5 download → Country mask  → Grid-cell components     →  ACI / componen
   [Copernicus CDS](https://cds.climate.copernicus.eu) account and the
   `ecmwfr` package.
 * **Step 2** downloads a land/sea country mask with `download_mask()`
-  (`data/era5/<country_abbrev>/mask_<country_abbrev>.nc`, variable `"country"`,
-  values in `[0, 1]`) — used by `apply_mask()` to restrict grid cells to the
-  country's land area (threshold on the land fraction, default `0.8`).
+  (variable `"country"`, values in `[0, 1]`) — used by `apply_mask()` to
+  restrict grid cells to the country's land area (threshold on the land
+  fraction, default `0.8`).
 * **Step 3** computes each component at grid-cell / monthly resolution and
-  caches it to `results/<country_abbrev>/*.rds` (`save = TRUE`) — the
-  expensive step, done once per country and reference period.
+  caches it (`save = TRUE`) — the expensive step, done once per country and
+  reference period.
 * **Step 4** reloads the cached components (`computed_components = TRUE`)
   and re-aggregates them on the fly to any temporal granularity (`"month"`,
   `"season"`, `"semester"`, `"year"`) and spatial level (national, grid-cell,
   administrative unit) — the step you repeat while exploring the data.
 
-Locally, computations are organised into two git-ignored directories:
+### Where things get cached
 
-| Directory   | Content                                                        |
-|-------------|-----------------------------------------------------------------|
-| `data/`     | Downloaded ERA5 NetCDFs (steps 1–2) and PSMSL tide-gauge files |
-| `results/`  | Cached grid-cell-level component objects, `.rds` (step 3)      |
+Steps 1-3 write to disk via a `dest_dir` (download functions) or `save_dir`
+(component functions, plus `sealevel_dir`) argument. All of these default to
+`NULL`, which resolves to a sub-directory of `tempdir()` — safe,
+zero-config, and cleared automatically at the end of the R session, in line
+with CRAN policy (packages must not write to the user's home filespace by
+default).
+
+Since the whole point of steps 1-3 is to avoid repeating long computations,
+you will usually want a directory that **persists** across sessions.
+Pass your own path explicitly; `tools::R_user_dir("xaci", which = "data")`
+is a convenient, per-user location that works well for this (it is what
+`xaci` itself uses internally to cache administrative boundaries):
+
+```r
+data_dir <- tools::R_user_dir("xaci", which = "data")
+
+download_era5_all(years = 2010:2020, country_abbrev = "FRA",
+                   area = c(51.5, -5.5, 41.0, 10.0), dest_dir = data_dir)
+
+temperature_component(..., save = TRUE, save_dir = data_dir)
+```
 
 ---
 

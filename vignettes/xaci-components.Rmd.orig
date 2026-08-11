@@ -330,9 +330,15 @@ dim(sealevel_grid$data)
 With real ERA5 data, each `*_component()` call above can take a long time.
 Pass `save = TRUE` once to cache the result to disk, then
 `computed_components = TRUE` on subsequent calls to reload it instantly —
-this is exactly what `calculate_aci()` does internally:
+this is exactly what `calculate_aci()` does internally.
+
+`save_dir`/`load_dir` default to `NULL` (a sub-directory of `tempdir()`,
+cleared at the end of the session); pass your own persistent directory, as
+below, to actually benefit from the cache across sessions:
 
 ```{r, eval = FALSE}
+results_dir <- tools::R_user_dir("xaci", which = "data")
+
 precipitation_component(
   precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
   country_abbrev           = "FRA",
@@ -341,7 +347,7 @@ precipitation_component(
   mask_path                 = "data/era5/FRA/mask_FRA.nc",
   area                       = FALSE,
   save                       = TRUE,
-  save_dir                   = "results/FRA"
+  save_dir                   = results_dir
 )
 
 # Later, or in a different session:
@@ -353,7 +359,7 @@ prec_national <- precipitation_component(
   mask_path                 = "data/era5/FRA/mask_FRA.nc",
   area                       = TRUE,
   computed_components        = TRUE,
-  load_dir                   = "results/FRA"
+  load_dir                   = results_dir
 )
 ```
 

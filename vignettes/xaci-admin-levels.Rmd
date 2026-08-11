@@ -50,6 +50,8 @@ dept_assignment <- assign_sealevel_to_admin(
   country_abbrev = "FRA", admin_level = 1, crs_metric = 2154
 )
 
+results_dir <- tools::R_user_dir("xaci", which = "data")
+
 dept_aci_FRA <- calculate_aci(
   country_abbrev      = "FRA",
   study_period          = c("2011-01-01", "2015-12-31"),
@@ -58,7 +60,7 @@ dept_aci_FRA <- calculate_aci(
   granularity               = "month",
   admin_level                = 1,
   crs_metric                  = 2154,
-  load_dir                     = "results/FRA",
+  load_dir                     = results_dir,
   computed_components           = TRUE
 )
 
@@ -81,7 +83,7 @@ prec_admin_L1 <- precipitation_component(
   area                          = FALSE,
   admin_mask                    = admin_mask_L1,
   computed_components            = TRUE,
-  load_dir                        = "results/FRA"
+  load_dir                        = results_dir
 )
 ```
 

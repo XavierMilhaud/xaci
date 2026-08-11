@@ -9,8 +9,8 @@ request_sealevel_data(country_abbrev, dest_dir = NULL)
 \arguments{
 \item{country_abbrev}{Three-letter ISO country code (e.g. \code{"FRA"}).}
 
-\item{dest_dir}{Destination directory. Defaults to
-\code{"data/psmsl/<country_abbrev>"}.}
+\item{dest_dir}{Destination directory. If \code{NULL} (default),
+resolves to a sub-directory of \code{tempdir()}.}
 }
 \value{
 Invisibly, the path to the destination directory.

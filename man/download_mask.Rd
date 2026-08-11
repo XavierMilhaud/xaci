@@ -19,7 +19,7 @@ download_mask(
 Default: metropolitan France.}
 
 \item{dest_dir}{Character. Directory for the output file.
-Default: \code{"data/era5/<country_abbrev>/"}.}
+Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 
 \item{overwrite}{Logical. Overwrite if the file already exists.
 Default \code{FALSE}.}
@@ -37,7 +37,7 @@ directly compatible with \code{\link{apply_mask}}.
 \dontrun{
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
-# Produces: data/era5/FRA/mask_FRA.nc
+# Produces (by default): <tempdir()>/xaci_era5/FRA/mask_FRA.nc
 download_mask(
   country_abbrev = "FRA",
   area      = c(51.5, -5.5, 41.0, 10.0)

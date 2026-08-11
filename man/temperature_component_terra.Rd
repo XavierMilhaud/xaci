@@ -20,8 +20,8 @@ temperature_component_terra(
   cores = 1L,
   computed_components = FALSE,
   save = FALSE,
-  save_dir = paste0("results/", country_abbrev),
-  load_dir = paste0("results/", country_abbrev)
+  save_dir = NULL,
+  load_dir = NULL
 )
 }
 \arguments{
@@ -62,9 +62,9 @@ distinct runs over different study windows don't collide or get mixed up.}
 
 \item{save}{Logical. Default \code{FALSE}.}
 
-\item{save_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+\item{save_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 
-\item{load_dir}{Character. Default \code{"results/<country_abbrev>"}.}
+\item{load_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 }
 \value{
 Same as \code{temperature_component()}: a standardized metric list,

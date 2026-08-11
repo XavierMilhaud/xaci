@@ -61,13 +61,13 @@ cds_set_key <- function(token) {
 #'   \code{c(51.5, -5.5, 41.0, 10.0)}.
 #' @param country_abbrev Character. Three-letter ISO 3166-1 alpha-3 country
 #'   code (e.g. \code{"FRA"}). Used to build the default output path
-#'   \code{data/era5/<country_abbrev>/}.
+#'   under \code{tempdir()} when \code{dest_dir} is not supplied.
 #'   Ignored when \code{dest_dir} is supplied explicitly. One of
 #'   \code{country_abbrev} or \code{dest_dir} must be provided.
 #' @param dest_dir Character. Directory where files will be saved. If
-#'   \code{NULL} (default), built automatically from \code{country_abbrev}
-#'   and \code{years} as \code{data/era5/<country_abbrev>/}.
-#'   Created if it does not exist.
+#'   \code{NULL} (default), resolves to a sub-directory of \code{tempdir()}
+#'   built from \code{country_abbrev}. Created if it does not exist. Pass
+#'   your own path for a location that persists across sessions.
 #' @param merge Logical. If \code{TRUE} (default) and more than one year is
 #'   requested, the individual yearly files are merged into a single file named
 #'   \code{<variable>_<first_year>_<last_year>.nc} using
@@ -85,7 +85,7 @@ cds_set_key <- function(token) {
 #' # Store your token once
 #' cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 #'
-#' # Automatic path: data/era5/FRA/tp_1961_1990.nc
+#' # Automatic path: <tempdir()>/xaci_era5/FRA/tp_1961_1990.nc
 #' download_era5(
 #'   variable       = "tp",
 #'   years          = 1961:1990,
@@ -115,12 +115,11 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
   variable <- match.arg(variable)
   cds_var  <- .ERA5_VARIABLES[variable]
 
-  if (is.null(dest_dir)) {
-    if (is.null(country_abbrev))
-      stop("Provide either 'country_abbrev' (to build the path automatically) ",
-           "or 'dest_dir' (to set it explicitly).")
-    dest_dir <- file.path("data", "era5", toupper(country_abbrev))
-  }
+  if (is.null(dest_dir) && is.null(country_abbrev))
+    stop("Provide either 'country_abbrev' (to build the path automatically) ",
+         "or 'dest_dir' (to set it explicitly).")
+  dest_dir <- .resolve_cache_dir(dest_dir,
+                                  file.path("xaci_era5", toupper(country_abbrev)))
 
   dir.create(file.path(dest_dir, "source"), recursive = TRUE, showWarnings = FALSE)
 
@@ -194,7 +193,8 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
 #'   Used to build the default output path. One of \code{country_abbrev} or
 #'   \code{dest_dir} must be provided.
 #' @param dest_dir Character. Output directory. If \code{NULL} (default),
-#'   built automatically as \code{data/era5/<country_abbrev>/}.
+#'   resolves to a sub-directory of \code{tempdir()}. Pass your own path
+#'   for a location that persists across sessions.
 #' @param merge     Logical. Merge yearly files. Default \code{TRUE}.
 #' @param overwrite Logical. Overwrite existing files. Default \code{FALSE}.
 #'
@@ -205,7 +205,7 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
 #' \dontrun{
 #' cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 #'
-#' # Produces: data/era5/FRA/t2m_1961_1990.nc, tp_..., u10_..., v10_...
+#' # Produces (by default): <tempdir()>/xaci_era5/FRA/t2m_1961_1990.nc, tp_..., u10_..., v10_...
 #' download_era5_all(
 #'   years          = 1961:1990,
 #'   area           = c(51.5, -5.5, 41.0, 10.0),
@@ -248,7 +248,7 @@ download_era5_all <- function(years,
 #' @param area Numeric vector \code{c(north, west, south, east)}.
 #'   Default: metropolitan France.
 #' @param dest_dir Character. Directory for the output file.
-#'   Default: \code{"data/era5/<country_abbrev>/"}.
+#'   Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @param overwrite Logical. Overwrite if the file already exists.
 #'   Default \code{FALSE}.
 #'
@@ -258,7 +258,7 @@ download_era5_all <- function(years,
 #' \dontrun{
 #' cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 #'
-#' # Produces: data/era5/FRA/mask_FRA.nc
+#' # Produces (by default): <tempdir()>/xaci_era5/FRA/mask_FRA.nc
 #' download_mask(
 #'   country_abbrev = "FRA",
 #'   area      = c(51.5, -5.5, 41.0, 10.0)
@@ -269,8 +269,8 @@ download_mask <- function(country_abbrev = "FRA",
                           dest_dir       = NULL,
                           overwrite      = FALSE) {
 
-  if (is.null(dest_dir))
-    dest_dir <- file.path("data", "era5", toupper(country_abbrev))
+  dest_dir <- .resolve_cache_dir(dest_dir,
+                                  file.path("xaci_era5", toupper(country_abbrev)))
 
   if (!requireNamespace("ecmwfr", quietly = TRUE))
     stop("Package 'ecmwfr' is required. Install it with: install.packages('ecmwfr')")

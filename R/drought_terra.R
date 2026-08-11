@@ -54,8 +54,11 @@ drought_component_terra <- function(precipitation_data_path,
                                     crs_metric            = 4326,
                                     computed_components   = FALSE,
                                     save                  = FALSE,
-                                    save_dir              = paste0("results/", country_abbrev),
-                                    load_dir              = paste0("results/", country_abbrev)) {
+                                    save_dir              = NULL,
+                                    load_dir              = NULL) {
+
+  save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
+  load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
 
   study_tag <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
                      substr(study_period[2], 1, 4), sep = "_")

@@ -638,7 +638,7 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
     # une VALEUR autonome. Sans danger : la fonction n'appelle que des
     # fonctions explicitement qualifiees (terra::, stats::).
     core_fun <- .calculate_percentiles_terra_core
-    environment(core_fun) <- globalenv()
+    environment(core_fun) <- baseenv()
 
     # parLapply gere deja la file d'attente si n_tiles > n_workers (les
     # tuiles excedentaires sont distribuees aux workers au fur et a mesure

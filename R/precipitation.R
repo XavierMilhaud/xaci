@@ -96,8 +96,8 @@ calculate_maximum_precipitation_over_window <- function(dataset,
 #' @param crs_metric              EPSG code. Default \code{4326}.
 #' @param computed_components     Logical. Default \code{FALSE}.
 #' @param save      Logical. Default \code{FALSE}.
-#' @param save_dir  Character. Default \code{"results/<country_abbrev>"}.
-#' @param load_dir  Character. Default \code{"results/<country_abbrev>"}.
+#' @param save_dir  Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
+#' @param load_dir  Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @return Named numeric vector, standardised list, or \code{data.frame}
 #'   per admin unit.
 #' @export
@@ -114,8 +114,11 @@ precipitation_component <- function(precipitation_data_path,
                                     crs_metric            = 4326,
                                     computed_components   = FALSE,
                                     save                  = FALSE,
-                                    save_dir              = paste0("results/", country_abbrev),
-                                    load_dir              = paste0("results/", country_abbrev)) {
+                                    save_dir              = NULL,
+                                    load_dir              = NULL) {
+
+  save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
+  load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
 
   study_tag <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
                      substr(study_period[2], 1, 4), sep = "_")

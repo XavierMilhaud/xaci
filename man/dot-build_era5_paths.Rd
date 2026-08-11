@@ -4,14 +4,17 @@
 \alias{.build_era5_paths}
 \title{Build standard ERA5 file paths from country and years}
 \usage{
-.build_era5_paths(country_abbrev, years, base_dir = "data/era5")
+.build_era5_paths(country_abbrev, years, base_dir = NULL)
 }
 \arguments{
 \item{country_abbrev}{ISO-3 country code (e.g. \code{"FRA"}).}
 
 \item{years}{Integer vector of years (e.g. \code{2011:2015}).}
 
-\item{base_dir}{Root data directory. Default \code{"data/era5"}.}
+\item{base_dir}{Root data directory. If \code{NULL} (default),
+matches the \code{tempdir()}-based fallback used by
+\code{\link{download_era5}} and \code{\link{download_mask}} when they
+are also called without an explicit \code{dest_dir}.}
 }
 \value{
 A named list with elements \code{t2m}, \code{tp}, \code{u10},

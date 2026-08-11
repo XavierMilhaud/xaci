@@ -26,14 +26,14 @@ in decimal degrees. Default is metropolitan France:
 
 \item{country_abbrev}{Character. Three-letter ISO 3166-1 alpha-3 country
 code (e.g. \code{"FRA"}). Used to build the default output path
-\code{data/era5/<country_abbrev>/}.
+under \code{tempdir()} when \code{dest_dir} is not supplied.
 Ignored when \code{dest_dir} is supplied explicitly. One of
 \code{country_abbrev} or \code{dest_dir} must be provided.}
 
 \item{dest_dir}{Character. Directory where files will be saved. If
-\code{NULL} (default), built automatically from \code{country_abbrev}
-and \code{years} as \code{data/era5/<country_abbrev>/}.
-Created if it does not exist.}
+\code{NULL} (default), resolves to a sub-directory of \code{tempdir()}
+built from \code{country_abbrev}. Created if it does not exist. Pass
+your own path for a location that persists across sessions.}
 
 \item{merge}{Logical. If \code{TRUE} (default) and more than one year is
 requested, the individual yearly files are merged into a single file named
@@ -63,7 +63,7 @@ The CDS Personal Access Token must be stored beforehand with
 # Store your token once
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
-# Automatic path: data/era5/FRA/tp_1961_1990.nc
+# Automatic path: <tempdir()>/xaci_era5/FRA/tp_1961_1990.nc
 download_era5(
   variable       = "tp",
   years          = 1961:1990,

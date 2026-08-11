@@ -24,18 +24,20 @@ test_that(".iso3_to_country_name échoue sur un code inconnu", {
 
 test_that(".build_era5_paths construit les 5 chemins attendus pour une plage d'années", {
   paths <- .build_era5_paths("FRA", 2011:2015)
+  expected_root <- file.path(tempdir(), "xaci_era5", "FRA")
 
-  expect_equal(paths$t2m,  "data/era5/FRA/t2m_2011_2015.nc")
-  expect_equal(paths$tp,   "data/era5/FRA/tp_2011_2015.nc")
-  expect_equal(paths$u10,  "data/era5/FRA/u10_2011_2015.nc")
-  expect_equal(paths$v10,  "data/era5/FRA/v10_2011_2015.nc")
-  expect_equal(paths$mask, "data/era5/FRA/mask_FRA.nc")
+  expect_equal(paths$t2m,  file.path(expected_root, "t2m_2011_2015.nc"))
+  expect_equal(paths$tp,   file.path(expected_root, "tp_2011_2015.nc"))
+  expect_equal(paths$u10,  file.path(expected_root, "u10_2011_2015.nc"))
+  expect_equal(paths$v10,  file.path(expected_root, "v10_2011_2015.nc"))
+  expect_equal(paths$mask, file.path(expected_root, "mask_FRA.nc"))
 })
 
 test_that(".build_era5_paths met le code pays en majuscules et gère une année unique", {
   paths <- .build_era5_paths("fra", 2020)
-  expect_equal(paths$t2m,  "data/era5/FRA/t2m_2020_2020.nc")
-  expect_equal(paths$mask, "data/era5/FRA/mask_FRA.nc")
+  expected_root <- file.path(tempdir(), "xaci_era5", "FRA")
+  expect_equal(paths$t2m,  file.path(expected_root, "t2m_2020_2020.nc"))
+  expect_equal(paths$mask, file.path(expected_root, "mask_FRA.nc"))
 })
 
 test_that(".build_era5_paths respecte un base_dir personnalisé", {

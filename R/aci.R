@@ -149,7 +149,7 @@ NULL
 #'   (\code{country} variable). If \code{NULL}, built automatically.
 #' @param sealevel_dir Character or \code{NULL}. Path to a directory of
 #'   already-downloaded PSMSL \code{.txt} files. If \code{NULL} (default),
-#'   data are downloaded automatically to \code{"data/psmsl/<country_abbrev>"}.
+#'   data are downloaded automatically to a sub-directory of \code{tempdir()}.
 #' @param percentile_high Numeric. Upper percentile used for the hot temperature
 #'   component. Default \code{90}. The corresponding column in the output will
 #'   be named \code{t<percentile_high>} (e.g. \code{t90}).
@@ -193,10 +193,11 @@ NULL
 #' @param save      Logical. If \code{TRUE}, saves the grid-cell-level object
 #'   to \code{save_dir} before aggregation. Default \code{FALSE}.
 #' @param save_dir  Character. Directory for the cached \code{.rds} file.
-#'   Created if it does not exist. Default \code{"results/<country_abbrev>"}.
+#'   Created if it does not exist. Default \code{NULL}, which resolves to a
+#'   sub-directory of \code{tempdir()}.
 #' @param load_dir  Character. Directory from which to reload previously saved
 #'   \code{.rds} component files when \code{computed_components = TRUE}.
-#'   Default \code{"results/<country_abbrev>"}.
+#'   Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @param computed_components Logical. If \code{TRUE}, rds files storing results
 #'   of the computations of ACI components at grid cell level are reused.
 #'   Default \code{FALSE}.
@@ -242,16 +243,25 @@ NULL
 #'       not just \code{ACI} itself.}
 #'   }
 #'
+#' @section Examples:
+#' The four examples below all require real ERA5 NetCDF files (temperature,
+#' precipitation, wind, country mask), obtained beforehand via
+#' \code{\link{download_era5}}/\code{\link{download_mask}} and a Copernicus
+#' CDS API key (see \code{\link{cds_set_key}}). They cannot be run
+#' automatically by \code{R CMD check} and are therefore wrapped in
+#' \code{dontrun}: (1) national ACI at annual granularity; (2) grid-cell
+#' ACI (full spatial output); (3) ACI with custom percentiles (T95/T5); and
+#' (4) ACI by department (admin level 2), using Lambert-93 for France.
+#'
 #' @examples
 #' \dontrun{
-#' # National ACI, annual granularity
 #' result <- calculate_aci(
-#'   temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
-#'   precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
-#'   wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
-#'   wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+#'   temperature_data_path   = "t2m_1960-2020.nc",
+#'   precipitation_data_path = "tp_1960-2020.nc",
+#'   wind_u10_data_path      = "u10_1960-2020.nc",
+#'   wind_v10_data_path      = "v10_1960-2020.nc",
 #'   country_abbrev          = "FRA",
-#'   mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+#'   mask_data_path          = "mask_FRA.nc",
 #'   study_period            = c("1980-01-01", "2020-12-31"),
 #'   reference_period        = c("1961-01-01", "1990-12-31"),
 #'   granularity             = "year",
@@ -259,14 +269,13 @@ NULL
 #'   factor                  = 1/5
 #' )
 #'
-#' # Grid-cell ACI (full spatial output)
 #' grid <- calculate_aci(
-#'   temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
-#'   precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
-#'   wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
-#'   wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+#'   temperature_data_path   = "t2m_1960-2020.nc",
+#'   precipitation_data_path = "tp_1960-2020.nc",
+#'   wind_u10_data_path      = "u10_1960-2020.nc",
+#'   wind_v10_data_path      = "v10_1960-2020.nc",
 #'   country_abbrev          = "FRA",
-#'   mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+#'   mask_data_path          = "mask_FRA.nc",
 #'   study_period            = c("1980-01-01", "2020-12-31"),
 #'   reference_period        = c("1961-01-01", "1990-12-31"),
 #'   granularity             = "year",
@@ -274,14 +283,13 @@ NULL
 #'   max_dist_km             = 500
 #' )
 #'
-#' # ACI with custom percentiles (T95 / T5)
 #' result_custom <- calculate_aci(
-#'   temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
-#'   precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
-#'   wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
-#'   wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+#'   temperature_data_path   = "t2m_1960-2020.nc",
+#'   precipitation_data_path = "tp_1960-2020.nc",
+#'   wind_u10_data_path      = "u10_1960-2020.nc",
+#'   wind_v10_data_path      = "v10_1960-2020.nc",
 #'   country_abbrev          = "FRA",
-#'   mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+#'   mask_data_path          = "mask_FRA.nc",
 #'   study_period            = c("1980-01-01", "2020-12-31"),
 #'   reference_period        = c("1961-01-01", "1990-12-31"),
 #'   granularity             = "year",
@@ -289,14 +297,13 @@ NULL
 #'   percentile_low          = 5
 #' )
 #'
-#' # ACI by department (admin level 2), using Lambert-93 for France
 #' result_dept <- calculate_aci(
-#'   temperature_data_path   = "data/era5/FRA/t2m_1960-2020.nc",
-#'   precipitation_data_path = "data/era5/FRA/tp_1960-2020.nc",
-#'   wind_u10_data_path      = "data/era5/FRA/u10_1960-2020.nc",
-#'   wind_v10_data_path      = "data/era5/FRA/v10_1960-2020.nc",
+#'   temperature_data_path   = "t2m_1960-2020.nc",
+#'   precipitation_data_path = "tp_1960-2020.nc",
+#'   wind_u10_data_path      = "u10_1960-2020.nc",
+#'   wind_v10_data_path      = "v10_1960-2020.nc",
 #'   country_abbrev          = "FRA",
-#'   mask_data_path          = "data/era5/FRA/mask_FRA.nc",
+#'   mask_data_path          = "mask_FRA.nc",
 #'   study_period            = c("1980-01-01", "2020-12-31"),
 #'   reference_period        = c("1961-01-01", "1990-12-31"),
 #'   granularity             = "year",
@@ -325,11 +332,14 @@ calculate_aci <- function(country_abbrev,
                           admin_level             = NULL,
                           crs_metric              = 4326,
                           save                    = FALSE,
-                          save_dir                = paste0("results/", country_abbrev),
-                          load_dir                = paste0("results/", country_abbrev),
+                          save_dir                = NULL,
+                          load_dir                = NULL,
                           computed_components     = FALSE,
                           engine                  = c("base", "terra"),
                           cores                   = 1L) {
+
+  save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
+  load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
 
   # engine = "terra" : bascule temperature_component()/wind_component()/
   # drought_component()/precipitation_component() vers leurs equivalents

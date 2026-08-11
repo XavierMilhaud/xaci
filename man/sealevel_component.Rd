@@ -11,14 +11,14 @@ sealevel_component(
   mask_path = NULL,
   area = TRUE,
   max_dist_km = 500,
-  sealevel_dir = paste0("data/psmsl/", country_abbrev),
+  sealevel_dir = NULL,
   admin_level = NULL,
   admin_assignment = NULL,
   crs_metric = 4326,
   computed_components = FALSE,
   save = FALSE,
-  save_dir = paste0("results/", country_abbrev),
-  load_dir = paste0("results/", country_abbrev)
+  save_dir = NULL,
+  load_dir = NULL
 )
 }
 \arguments{
@@ -66,11 +66,11 @@ saved \code{.rds} file from \code{load_dir}. Default \code{FALSE}.}
 \code{save_dir}. Default \code{FALSE}.}
 
 \item{save_dir}{Character. Directory for saving results.
-Default \code{"results/<country_abbrev>"}.}
+Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 
 \item{load_dir}{Character. Directory from which to reload a cached result
 when \code{computed_components = TRUE}.
-Default \code{"results/<country_abbrev>"}.}
+Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 }
 \value{
 If \code{area = FALSE}: a list with a \code{[lon x lat x t]} array,

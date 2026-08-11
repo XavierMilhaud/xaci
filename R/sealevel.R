@@ -238,14 +238,14 @@ sealevel_process <- function(directory, study_period, reference_period) {
 #' website, and stores them locally.
 #'
 #' @param country_abbrev Three-letter ISO country code (e.g. \code{"FRA"}).
-#' @param dest_dir Destination directory. Defaults to
-#'   \code{"data/psmsl/<country_abbrev>"}.
+#' @param dest_dir Destination directory. If \code{NULL} (default),
+#'   resolves to a sub-directory of \code{tempdir()}.
 #' @return Invisibly, the path to the destination directory.
 #' @export
 request_sealevel_data <- function(country_abbrev,
                                   dest_dir = NULL) {
-  if (is.null(dest_dir))
-    dest_dir <- file.path("data", "psmsl", toupper(country_abbrev))
+  dest_dir <- .resolve_cache_dir(dest_dir,
+                                  file.path("xaci_psmsl", toupper(country_abbrev)))
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   psmsl  <- load_psmsl_data()
@@ -491,10 +491,10 @@ interpolate_sealevel_to_grid <- function(raw, lon, lat,
 #' @param save     Logical. If \code{TRUE}, saves the processed result to
 #'   \code{save_dir}. Default \code{FALSE}.
 #' @param save_dir Character. Directory for saving results.
-#'   Default \code{"results/<country_abbrev>"}.
+#'   Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @param load_dir Character. Directory from which to reload a cached result
 #'   when \code{computed_components = TRUE}.
-#'   Default \code{"results/<country_abbrev>"}.
+#'   Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @return If \code{area = FALSE}: a list with a \code{[lon x lat x t]} array,
 #'   \code{lon}, \code{lat}, \code{time} — same structure as other grid-cell
 #'   components. If \code{area = TRUE}: a \code{data.frame} of station
@@ -506,14 +506,17 @@ sealevel_component <- function(country_abbrev,
                                mask_path           = NULL,
                                area                = TRUE,
                                max_dist_km         = 500,
-                               sealevel_dir        = paste0("data/psmsl/", country_abbrev),
+                               sealevel_dir        = NULL,
                                admin_level         = NULL,
                                admin_assignment    = NULL,
                                crs_metric          = 4326,
                                computed_components = FALSE,
                                save                = FALSE,
-                               save_dir            = paste0("results/", country_abbrev),
-                               load_dir            = paste0("results/", country_abbrev)) {
+                               save_dir            = NULL,
+                               load_dir            = NULL) {
+
+  save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
+  load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
 
   study_tag <- paste(substr(study_period[1], 1, 4), substr(reference_period[2], 1, 4),
                      substr(study_period[2], 1, 4), sep = "_")

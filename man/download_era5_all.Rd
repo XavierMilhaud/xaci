@@ -24,7 +24,8 @@ Used to build the default output path. One of \code{country_abbrev} or
 \code{dest_dir} must be provided.}
 
 \item{dest_dir}{Character. Output directory. If \code{NULL} (default),
-built automatically as \code{data/era5/<country_abbrev>/}.}
+resolves to a sub-directory of \code{tempdir()}. Pass your own path
+for a location that persists across sessions.}
 
 \item{merge}{Logical. Merge yearly files. Default \code{TRUE}.}
 
@@ -42,7 +43,7 @@ per variable: \code{t2m}, \code{tp}, \code{u10}, \code{v10}).
 \dontrun{
 cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
-# Produces: data/era5/FRA/t2m_1961_1990.nc, tp_..., u10_..., v10_...
+# Produces (by default): <tempdir()>/xaci_era5/FRA/t2m_1961_1990.nc, tp_..., u10_..., v10_...
 download_era5_all(
   years          = 1961:1990,
   area           = c(51.5, -5.5, 41.0, 10.0),

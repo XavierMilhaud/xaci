@@ -3,6 +3,29 @@
 #' @name utils
 NULL
 
+#' Resolve a caching/output directory, defaulting to a session tempdir()
+#'
+#' CRAN policy forbids writing to the user's home filespace (including the
+#' package directory and \code{getwd()}) by default. All \code{save_dir},
+#' \code{load_dir}, \code{sealevel_dir} and \code{dest_dir} arguments across
+#' the package therefore default to \code{NULL}, and are resolved here to a
+#' sub-directory of \code{tempdir()} when the user does not supply an
+#' explicit path. Users who want persistent caching across sessions should
+#' pass their own directory explicitly.
+#'
+#' @param dir Character or \code{NULL}. User-supplied directory.
+#' @param subdir Character or \code{NULL}. Sub-path appended to
+#'   \code{tempdir()} when \code{dir} is \code{NULL}, to namespace the
+#'   fallback location (e.g. by country/component).
+#' @return Character. The resolved directory path.
+#' @keywords internal
+.resolve_cache_dir <- function(dir, subdir = NULL) {
+  if (is.null(dir)) {
+    dir <- if (is.null(subdir)) tempdir() else file.path(tempdir(), subdir)
+  }
+  dir
+}
+
 xaciStartupMessage <- function()
 {
   msg <- c(paste0(
@@ -167,11 +190,15 @@ xaciStartupMessage <- function()
 #'
 #' @param country_abbrev ISO-3 country code (e.g. \code{"FRA"}).
 #' @param years          Integer vector of years (e.g. \code{2011:2015}).
-#' @param base_dir       Root data directory. Default \code{"data/era5"}.
+#' @param base_dir       Root data directory. If \code{NULL} (default),
+#'   matches the \code{tempdir()}-based fallback used by
+#'   \code{\link{download_era5}} and \code{\link{download_mask}} when they
+#'   are also called without an explicit \code{dest_dir}.
 #' @return A named list with elements \code{t2m}, \code{tp}, \code{u10},
 #'   \code{v10}, and \code{mask}.
 #' @keywords internal
-.build_era5_paths <- function(country_abbrev, years, base_dir = "data/era5") {
+.build_era5_paths <- function(country_abbrev, years, base_dir = NULL) {
+  base_dir <- .resolve_cache_dir(base_dir, "xaci_era5")
   iso   <- toupper(country_abbrev)
   period <- paste(years[1], years[length(years)], sep = "_")
   era5_dir <- file.path(base_dir, iso)

@@ -90,16 +90,16 @@ in decimal degrees. Default is metropolitan France:
 <dt id="arg-country-abbrev">country_abbrev<a class="anchor" aria-label="anchor" href="#arg-country-abbrev"></a></dt>
 <dd><p>Character. Three-letter ISO 3166-1 alpha-3 country
 code (e.g. <code>"FRA"</code>). Used to build the default output path
-<code>data/era5/&lt;country_abbrev&gt;/</code>.
+under <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code> when <code>dest_dir</code> is not supplied.
 Ignored when <code>dest_dir</code> is supplied explicitly. One of
 <code>country_abbrev</code> or <code>dest_dir</code> must be provided.</p></dd>
 
 
 <dt id="arg-dest-dir">dest_dir<a class="anchor" aria-label="anchor" href="#arg-dest-dir"></a></dt>
 <dd><p>Character. Directory where files will be saved. If
-<code>NULL</code> (default), built automatically from <code>country_abbrev</code>
-and <code>years</code> as <code>data/era5/&lt;country_abbrev&gt;/</code>.
-Created if it does not exist.</p></dd>
+<code>NULL</code> (default), resolves to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>
+built from <code>country_abbrev</code>. Created if it does not exist. Pass
+your own path for a location that persists across sessions.</p></dd>
 
 
 <dt id="arg-merge">merge<a class="anchor" aria-label="anchor" href="#arg-merge"></a></dt>
@@ -132,7 +132,7 @@ file already exists.</p></dd>
 <span class="r-in"><span><span class="co"># Store your token once</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="cds_set_key.html">cds_set_key</a></span><span class="op">(</span><span class="st">"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Automatic path: data/era5/FRA/tp_1961_1990.nc</span></span></span>
+<span class="r-in"><span><span class="co"># Automatic path: &lt;tempdir()&gt;/xaci_era5/FRA/tp_1961_1990.nc</span></span></span>
 <span class="r-in"><span><span class="fu">download_era5</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  variable       <span class="op">=</span> <span class="st">"tp"</span>,</span></span>
 <span class="r-in"><span>  years          <span class="op">=</span> <span class="fl">1961</span><span class="op">:</span><span class="fl">1990</span>,</span></span>

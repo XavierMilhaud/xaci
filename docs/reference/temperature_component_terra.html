@@ -70,8 +70,8 @@ over long historical periods (40+ years hourly).</p>
 <span>  cores <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  computed_components <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  save <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  save_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"results/"</span>, <span class="va">country_abbrev</span><span class="op">)</span>,</span>
-<span>  load_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"results/"</span>, <span class="va">country_abbrev</span><span class="op">)</span></span>
+<span>  save_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  load_dir <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -147,11 +147,11 @@ distinct runs over different study windows don't collide or get mixed up.</p></d
 
 
 <dt id="arg-save-dir">save_dir<a class="anchor" aria-label="anchor" href="#arg-save-dir"></a></dt>
-<dd><p>Character. Default <code>"results/&lt;country_abbrev&gt;"</code>.</p></dd>
+<dd><p>Character. Default <code>NULL</code>, which resolves to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-load-dir">load_dir<a class="anchor" aria-label="anchor" href="#arg-load-dir"></a></dt>
-<dd><p>Character. Default <code>"results/&lt;country_abbrev&gt;"</code>.</p></dd>
+<dd><p>Character. Default <code>NULL</code>, which resolves to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

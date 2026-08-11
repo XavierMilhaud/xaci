@@ -51,7 +51,7 @@ download_era5_all() and download_mask()."></head><body>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.build_era5_paths</span><span class="op">(</span><span class="va">country_abbrev</span>, <span class="va">years</span>, base_dir <span class="op">=</span> <span class="st">"data/era5"</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">.build_era5_paths</span><span class="op">(</span><span class="va">country_abbrev</span>, <span class="va">years</span>, base_dir <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -67,7 +67,10 @@ download_era5_all() and download_mask()."></head><body>
 
 
 <dt id="arg-base-dir">base_dir<a class="anchor" aria-label="anchor" href="#arg-base-dir"></a></dt>
-<dd><p>Root data directory. Default <code>"data/era5"</code>.</p></dd>
+<dd><p>Root data directory. If <code>NULL</code> (default),
+matches the <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>-based fallback used by
+<code><a href="download_era5.html">download_era5</a></code> and <code><a href="download_mask.html">download_mask</a></code> when they
+are also called without an explicit <code>dest_dir</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

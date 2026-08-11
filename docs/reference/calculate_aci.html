@@ -74,8 +74,8 @@ combines them into a single ACI time series:</p>
 <span>  admin_level <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  crs_metric <span class="op">=</span> <span class="fl">4326</span>,</span>
 <span>  save <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  save_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"results/"</span>, <span class="va">country_abbrev</span><span class="op">)</span>,</span>
-<span>  load_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"results/"</span>, <span class="va">country_abbrev</span><span class="op">)</span>,</span>
+<span>  save_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  load_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  computed_components <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  engine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"base"</span>, <span class="st">"terra"</span><span class="op">)</span>,</span>
 <span>  cores <span class="op">=</span> <span class="fl">1L</span></span>
@@ -139,7 +139,7 @@ from <code>country_abbrev</code> and <code>years</code>.</p></dd>
 <dt id="arg-sealevel-dir">sealevel_dir<a class="anchor" aria-label="anchor" href="#arg-sealevel-dir"></a></dt>
 <dd><p>Character or <code>NULL</code>. Path to a directory of
 already-downloaded PSMSL <code>.txt</code> files. If <code>NULL</code> (default),
-data are downloaded automatically to <code>"data/psmsl/&lt;country_abbrev&gt;"</code>.</p></dd>
+data are downloaded automatically to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-percentile-high">percentile_high<a class="anchor" aria-label="anchor" href="#arg-percentile-high"></a></dt>
@@ -213,13 +213,14 @@ to <code>save_dir</code> before aggregation. Default <code>FALSE</code>.</p></dd
 
 <dt id="arg-save-dir">save_dir<a class="anchor" aria-label="anchor" href="#arg-save-dir"></a></dt>
 <dd><p>Character. Directory for the cached <code>.rds</code> file.
-Created if it does not exist. Default <code>"results/&lt;country_abbrev&gt;"</code>.</p></dd>
+Created if it does not exist. Default <code>NULL</code>, which resolves to a
+sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-load-dir">load_dir<a class="anchor" aria-label="anchor" href="#arg-load-dir"></a></dt>
 <dd><p>Character. Directory from which to reload previously saved
 <code>.rds</code> component files when <code>computed_components = TRUE</code>.
-Default <code>"results/&lt;country_abbrev&gt;"</code>.</p></dd>
+Default <code>NULL</code>, which resolves to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
 
 
 <dt id="arg-computed-components">computed_components<a class="anchor" aria-label="anchor" href="#arg-computed-components"></a></dt>
@@ -289,18 +290,30 @@ default <code>1/5</code>). For administrative units without coastal stations,
 \(\alpha \in \{0, 1\}\) depending on whether the cell lies within
 <code>max_dist_km</code> of a tide-gauge station.</p>
     </div>
+    <div class="section level2">
+    <h2 id="examples">Examples<a class="anchor" aria-label="anchor" href="#examples"></a></h2>
+
+
+<p>The four examples below all require real ERA5 NetCDF files (temperature,
+precipitation, wind, country mask), obtained beforehand via
+<code><a href="download_era5.html">download_era5</a></code>/<code><a href="download_mask.html">download_mask</a></code> and a Copernicus
+CDS API key (see <code><a href="cds_set_key.html">cds_set_key</a></code>). They cannot be run
+automatically by <code>R CMD check</code> and are therefore wrapped in
+<code>dontrun</code>: (1) national ACI at annual granularity; (2) grid-cell
+ACI (full spatial output); (3) ACI with custom percentiles (T95/T5); and
+(4) ACI by department (admin level 2), using Lambert-93 for France.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># National ACI, annual granularity</span></span></span>
 <span class="r-in"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu">calculate_aci</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"data/era5/FRA/t2m_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"data/era5/FRA/tp_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/u10_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/v10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"t2m_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"tp_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"u10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"v10_1960-2020.nc"</span>,</span></span>
 <span class="r-in"><span>  country_abbrev          <span class="op">=</span> <span class="st">"FRA"</span>,</span></span>
-<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"data/era5/FRA/mask_FRA.nc"</span>,</span></span>
+<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"mask_FRA.nc"</span>,</span></span>
 <span class="r-in"><span>  study_period            <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1980-01-01"</span>, <span class="st">"2020-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  reference_period        <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"1990-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  granularity             <span class="op">=</span> <span class="st">"year"</span>,</span></span>
@@ -308,14 +321,13 @@ default <code>1/5</code>). For administrative units without coastal stations,
 <span class="r-in"><span>  factor                  <span class="op">=</span> <span class="fl">1</span><span class="op">/</span><span class="fl">5</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Grid-cell ACI (full spatial output)</span></span></span>
 <span class="r-in"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu">calculate_aci</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"data/era5/FRA/t2m_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"data/era5/FRA/tp_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/u10_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/v10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"t2m_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"tp_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"u10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"v10_1960-2020.nc"</span>,</span></span>
 <span class="r-in"><span>  country_abbrev          <span class="op">=</span> <span class="st">"FRA"</span>,</span></span>
-<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"data/era5/FRA/mask_FRA.nc"</span>,</span></span>
+<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"mask_FRA.nc"</span>,</span></span>
 <span class="r-in"><span>  study_period            <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1980-01-01"</span>, <span class="st">"2020-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  reference_period        <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"1990-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  granularity             <span class="op">=</span> <span class="st">"year"</span>,</span></span>
@@ -323,14 +335,13 @@ default <code>1/5</code>). For administrative units without coastal stations,
 <span class="r-in"><span>  max_dist_km             <span class="op">=</span> <span class="fl">500</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># ACI with custom percentiles (T95 / T5)</span></span></span>
 <span class="r-in"><span><span class="va">result_custom</span> <span class="op">&lt;-</span> <span class="fu">calculate_aci</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"data/era5/FRA/t2m_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"data/era5/FRA/tp_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/u10_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/v10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"t2m_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"tp_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"u10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"v10_1960-2020.nc"</span>,</span></span>
 <span class="r-in"><span>  country_abbrev          <span class="op">=</span> <span class="st">"FRA"</span>,</span></span>
-<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"data/era5/FRA/mask_FRA.nc"</span>,</span></span>
+<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"mask_FRA.nc"</span>,</span></span>
 <span class="r-in"><span>  study_period            <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1980-01-01"</span>, <span class="st">"2020-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  reference_period        <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"1990-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  granularity             <span class="op">=</span> <span class="st">"year"</span>,</span></span>
@@ -338,14 +349,13 @@ default <code>1/5</code>). For administrative units without coastal stations,
 <span class="r-in"><span>  percentile_low          <span class="op">=</span> <span class="fl">5</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># ACI by department (admin level 2), using Lambert-93 for France</span></span></span>
 <span class="r-in"><span><span class="va">result_dept</span> <span class="op">&lt;-</span> <span class="fu">calculate_aci</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"data/era5/FRA/t2m_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"data/era5/FRA/tp_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/u10_1960-2020.nc"</span>,</span></span>
-<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"data/era5/FRA/v10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  temperature_data_path   <span class="op">=</span> <span class="st">"t2m_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  precipitation_data_path <span class="op">=</span> <span class="st">"tp_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_u10_data_path      <span class="op">=</span> <span class="st">"u10_1960-2020.nc"</span>,</span></span>
+<span class="r-in"><span>  wind_v10_data_path      <span class="op">=</span> <span class="st">"v10_1960-2020.nc"</span>,</span></span>
 <span class="r-in"><span>  country_abbrev          <span class="op">=</span> <span class="st">"FRA"</span>,</span></span>
-<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"data/era5/FRA/mask_FRA.nc"</span>,</span></span>
+<span class="r-in"><span>  mask_data_path          <span class="op">=</span> <span class="st">"mask_FRA.nc"</span>,</span></span>
 <span class="r-in"><span>  study_period            <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1980-01-01"</span>, <span class="st">"2020-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  reference_period        <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"1961-01-01"</span>, <span class="st">"1990-12-31"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  granularity             <span class="op">=</span> <span class="st">"year"</span>,</span></span>

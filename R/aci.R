@@ -389,29 +389,47 @@ calculate_aci <- function(country_abbrev,
   admin_assignment <- NULL
 
   if (!is.null(admin_level)) {
-    # Noms des fichiers de cache admin
     admin_tag <- sprintf("%s_L%d", country_abbrev, admin_level)
-    mask_path_rds       <- file.path(save_dir,
-                                     paste0("admin_mask_",       admin_tag, ".rds"))
-    assignment_path_rds <- file.path(save_dir,
-                                     paste0("admin_assignment_", admin_tag, ".rds"))
+    mask_path_rds_load       <- file.path(load_dir,
+                                          paste0("admin_mask_",       admin_tag, ".rds"))
+    assignment_path_rds_load <- file.path(load_dir,
+                                          paste0("admin_assignment_", admin_tag, ".rds"))
+    mask_path_rds_save       <- file.path(save_dir,
+                                          paste0("admin_mask_",       admin_tag, ".rds"))
+    assignment_path_rds_save <- file.path(save_dir,
+                                          paste0("admin_assignment_", admin_tag, ".rds"))
 
     if (computed_components &&
-        file.exists(mask_path_rds) && file.exists(assignment_path_rds)) {
-      message("Loading cached admin mask and sealevel assignment...")
-      admin_mask       <- readRDS(mask_path_rds)
-      admin_assignment <- readRDS(assignment_path_rds)
+        file.exists(mask_path_rds_load) && file.exists(assignment_path_rds_load)) {
+      message("Loading cached admin mask and sealevel assignment from: ", load_dir)
+      admin_mask       <- readRDS(mask_path_rds_load)
+      admin_assignment <- readRDS(assignment_path_rds_load)
+
     } else {
       message("Building administrative mask (this may take a moment)...")
-      if (engine == "terra") {
-        tmp_r       <- load_component_terra(precipitation_data_path, "tp", mask_data_path)
-        tmp_dataset <- .spatraster_to_list(tmp_r[[1]])   # 1 seule couche suffit pour lon/lat
-      } else {
-        tmp_dataset <- load_component(precipitation_data_path, "tp", mask_data_path)
-      }
+      # On extrait lon/lat depuis mask_data_path plutot que depuis un fichier
+      # de composante (ex. precipitation_data_path) : le masque est toujours
+      # requis (que admin_level soit NULL ou non), alors que les chemins de
+      # composantes bruts peuvent etre absents (ex. mode computed_components
+      # = TRUE avec composantes deja en cache) et sont alors resolus
+      # automatiquement via .build_era5_paths() -- qui ignore un eventuel
+      # dest_dir personnalise passe a download_era5_all(). Utiliser
+      # mask_data_path evite cette dependance et le risque de pointer vers un
+      # fichier de precipitation inexistant.
+      #
+      # On n'utilise PAS load_netcdf()/load_netcdf_terra() ici : le fichier
+      # de masque produit par download_mask() n'a pas de variable "time"
+      # (retiree par .rename_mask_variable(), le masque etant statique), et
+      # ces deux fonctions lisent "time" de maniere inconditionnelle -- lon
+      # et lat sont donc extraits directement via ncdf4.
+      mask_nc      <- ncdf4::nc_open(mask_data_path)
+      admin_lon    <- ncdf4::ncvar_get(mask_nc, "longitude")
+      admin_lat    <- ncdf4::ncvar_get(mask_nc, "latitude")
+      ncdf4::nc_close(mask_nc)
+
       admin_mask  <- build_admin_mask(
-        lon            = tmp_dataset$lon,
-        lat            = tmp_dataset$lat,
+        lon            = admin_lon,
+        lat            = admin_lat,
         country_abbrev = country_abbrev,
         admin_level    = admin_level,
         crs_metric     = crs_metric
@@ -421,12 +439,11 @@ calculate_aci <- function(country_abbrev,
         admin_level    = admin_level,
         crs_metric     = crs_metric
       )
-      rm(tmp_dataset)
 
       if (save) {
         dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
-        saveRDS(admin_mask,       mask_path_rds)
-        saveRDS(admin_assignment, assignment_path_rds)
+        saveRDS(admin_mask,       mask_path_rds_save)
+        saveRDS(admin_assignment, assignment_path_rds_save)
         message("Admin mask and sealevel assignment saved to: ", save_dir)
       }
     }

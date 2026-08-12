@@ -9,15 +9,21 @@ sealevel_standardize_data(df, monthly_means, monthly_std_devs, study_period)
 \arguments{
 \item{df}{Clean \code{data.frame}.}
 
-\item{monthly_means}{Named numeric vector (months 1–12).}
+\item{monthly_means}{Numeric matrix, 12 rows (months \code{"1"}-\code{"12"})
+x one column per station, as returned by
+\code{sealevel_compute_monthly_stats(..., stats = "means")}.}
 
-\item{monthly_std_devs}{Named numeric vector (months 1–12).}
+\item{monthly_std_devs}{Same shape as \code{monthly_means}, for
+\code{stats = "std"}.}
 
 \item{study_period}{Character vector \code{c("start", "end")}.}
 }
 \value{
 A \code{data.frame} of standardised anomalies for the study period,
-  with rows containing all-NA removed.
+  with rows containing all-NA removed. Each station's values are
+  standardised against its own monthly reference (see
+  \code{sealevel_compute_monthly_stats()}), not a value pooled across
+  stations.
 }
 \description{
 Standardise sea-level data over the study period

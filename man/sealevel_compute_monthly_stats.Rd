@@ -14,7 +14,13 @@ sealevel_compute_monthly_stats(df, reference_period, stats)
 \item{stats}{\code{"means"} or \code{"std"}.}
 }
 \value{
-A named numeric vector of length 12 (one value per calendar month).
+A numeric matrix, 12 rows (calendar months \code{"1"}-\code{"12"}
+  as row names) x one column per station (station names as returned by
+  \code{colnames(df)}). Each station is standardised against its own
+  monthly reference statistics, independently of the other stations --
+  consistent with how the other ACI components (ERA5 grid cells,
+  administrative units) are each standardised against their own
+  reference, not a value pooled across the whole spatial domain.
 }
 \description{
 Compute monthly reference statistics for sea-level data

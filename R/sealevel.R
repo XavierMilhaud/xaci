@@ -42,21 +42,18 @@ sealevel_load_data <- function(directory) {
 #'
 #' Reads the PSMSL station metadata CSV (columns: Station Name, ID, Lat.,
 #' Lon., GLOSS ID, Country, Date, Coastline, Station) and returns coordinates
-#' for the stations present in the data directory.
+#' for the requested stations.
 #'
-#' @param directory Path to the PSMSL data directory. The metadata file
-#'   \code{psmsl_data.csv} must be located in the same directory or its
-#'   parent. Alternatively, \code{meta_path} can be supplied directly.
 #' @param meta_path Optional explicit path to the CSV file. If \code{NULL}
-#'   (default), the function looks for \code{psmsl_data.csv} first in
-#'   \code{directory}, then one level up.
+#'   (default), the metadata CSV bundled with the package
+#'   (\code{inst/extdata/psmsl_data.csv}, located via \code{system.file()})
+#'   is used.
 #' @param station_ids Integer vector of PSMSL station IDs to keep. If
 #'   \code{NULL} (default), all stations in the CSV are returned.
 #' @return A \code{data.frame} with columns \code{station_id} (character,
 #'   e.g. \code{"Measurement_1"}), \code{lon}, \code{lat}.
 #' @keywords internal
-sealevel_load_metadata <- function(directory,
-                                   meta_path = NULL,
+sealevel_load_metadata <- function(meta_path = NULL,
                                    station_ids = NULL) {
   # Localiser le fichier de métadonnées
   if (is.null(meta_path)) {
@@ -139,40 +136,61 @@ sealevel_clean_data <- function(df) {
 #' @param df               Clean \code{data.frame} (row names = \code{"YYYY-MM-DD"}).
 #' @param reference_period Character vector \code{c("start", "end")}.
 #' @param stats            \code{"means"} or \code{"std"}.
-#' @return A named numeric vector of length 12 (one value per calendar month).
+#' @return A numeric matrix, 12 rows (calendar months \code{"1"}-\code{"12"}
+#'   as row names) x one column per station (station names as returned by
+#'   \code{colnames(df)}). Each station is standardised against its own
+#'   monthly reference statistics, independently of the other stations --
+#'   consistent with how the other ACI components (ERA5 grid cells,
+#'   administrative units) are each standardised against their own
+#'   reference, not a value pooled across the whole spatial domain.
 #' @export
 sealevel_compute_monthly_stats <- function(df, reference_period, stats) {
   dates    <- as.Date(rownames(df))
   ref_mask <- dates >= as.Date(reference_period[1]) &
     dates <=  as.Date(reference_period[2])
   df_ref   <- df[ref_mask, , drop = FALSE]
-  row_mean <- rowMeans(df_ref, na.rm = TRUE)
-  months   <- as.integer(format(as.Date(rownames(df_ref)), "%m"))
+  # levels = 1:12 force les 12 mois a etre presents (NA le cas echeant) et
+  # dans cet ordre, meme si un mois entier est absent de la periode de
+  # reference pour l'ensemble du jeu de donnees -- evite un decalage entre
+  # le numero de mois et la position dans le resultat.
+  months   <- factor(as.integer(format(as.Date(rownames(df_ref)), "%m")),
+                     levels = 1:12)
 
-  if (stats == "means") {
-    tapply(row_mean, months, mean, na.rm = TRUE)
-  } else if (stats == "std") {
-    sd_v <- tapply(row_mean, months, sd, na.rm = TRUE)
-    # Meme garde-fou que standardize_metric() (R/utils.R) : un mois avec un
-    # seul echantillon dans la periode de reference (ex: reference_period
-    # ne couvrant qu'une annee) donne sd() = NA, ce qui propagerait des NA
-    # a TOUTES les lignes standardisees dans sealevel_standardize_data(),
-    # et donc les ferait toutes supprimer (cf. sealevel_standardize_data()).
-    sd_v[is.na(sd_v) | sd_v < .Machine$double.eps] <- 1
-    sd_v
-  } else {
-    stop("'stats' must be 'means' or 'std'")
+  compute_col <- function(col) {
+    if (stats == "means") {
+      as.numeric(tapply(col, months, mean, na.rm = TRUE))
+    } else if (stats == "std") {
+      sd_v <- as.numeric(tapply(col, months, sd, na.rm = TRUE))
+      # Meme garde-fou qu'avant : un mois avec un seul echantillon (ou
+      # aucun) dans la periode de reference pour CETTE station donne
+      # sd() = NA, ce qui propagerait des NA a toutes les lignes
+      # standardisees de CETTE station dans sealevel_standardize_data().
+      sd_v[is.na(sd_v) | sd_v < .Machine$double.eps] <- 1
+      sd_v
+    } else {
+      stop("'stats' must be 'means' or 'std'")
+    }
   }
+
+  result <- vapply(df_ref, compute_col, numeric(12))
+  dimnames(result) <- list(as.character(1:12), colnames(df_ref))
+  result
 }
 
 #' Standardise sea-level data over the study period
 #'
 #' @param df               Clean \code{data.frame}.
-#' @param monthly_means    Named numeric vector (months 1–12).
-#' @param monthly_std_devs Named numeric vector (months 1–12).
+#' @param monthly_means    Numeric matrix, 12 rows (months \code{"1"}-\code{"12"})
+#'   x one column per station, as returned by
+#'   \code{sealevel_compute_monthly_stats(..., stats = "means")}.
+#' @param monthly_std_devs Same shape as \code{monthly_means}, for
+#'   \code{stats = "std"}.
 #' @param study_period     Character vector \code{c("start", "end")}.
 #' @return A \code{data.frame} of standardised anomalies for the study period,
-#'   with rows containing all-NA removed.
+#'   with rows containing all-NA removed. Each station's values are
+#'   standardised against its own monthly reference (see
+#'   \code{sealevel_compute_monthly_stats()}), not a value pooled across
+#'   stations.
 #' @export
 sealevel_standardize_data <- function(df, monthly_means, monthly_std_devs,
                                       study_period) {
@@ -181,11 +199,13 @@ sealevel_standardize_data <- function(df, monthly_means, monthly_std_devs,
     dates <=  as.Date(study_period[2])
   df_study   <- df[study_mask, , drop = FALSE]
   months     <- as.integer(format(as.Date(rownames(df_study)), "%m"))
+  stations   <- colnames(df_study)
 
   out <- df_study
   for (r in seq_len(nrow(out))) {
-    m        <- months[r]
-    out[r, ] <- (df_study[r, ] - monthly_means[m]) / monthly_std_devs[m]
+    m        <- as.character(months[r])
+    out[r, ] <- (df_study[r, stations] - monthly_means[m, stations]) /
+      monthly_std_devs[m, stations]
   }
   out[!apply(is.na(out), 1, all), , drop = FALSE]
 }
@@ -213,8 +233,7 @@ sealevel_process <- function(directory, study_period, reference_period) {
   station_ids <- as.integer(
     sub("^Measurement_", "", colnames(df))
   )
-  coords <- sealevel_load_metadata(directory,
-                                   meta_path = NULL,
+  coords <- sealevel_load_metadata(meta_path = NULL,
                                    station_ids = station_ids)
 
   # Garder uniquement les stations présentes dans df
@@ -245,7 +264,7 @@ sealevel_process <- function(directory, study_period, reference_period) {
 request_sealevel_data <- function(country_abbrev,
                                   dest_dir = NULL) {
   dest_dir <- .resolve_cache_dir(dest_dir,
-                                  file.path("xaci_psmsl", toupper(country_abbrev)))
+                                 file.path("xaci_psmsl", toupper(country_abbrev)))
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   psmsl  <- load_psmsl_data()

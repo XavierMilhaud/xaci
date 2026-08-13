@@ -60,11 +60,14 @@
 
 
 <dt id="arg-monthly-means">monthly_means<a class="anchor" aria-label="anchor" href="#arg-monthly-means"></a></dt>
-<dd><p>Named numeric vector (months 1–12).</p></dd>
+<dd><p>Numeric matrix, 12 rows (months <code>"1"</code>-<code>"12"</code>)
+x one column per station, as returned by
+<code>sealevel_compute_monthly_stats(..., stats = "means")</code>.</p></dd>
 
 
 <dt id="arg-monthly-std-devs">monthly_std_devs<a class="anchor" aria-label="anchor" href="#arg-monthly-std-devs"></a></dt>
-<dd><p>Named numeric vector (months 1–12).</p></dd>
+<dd><p>Same shape as <code>monthly_means</code>, for
+<code>stats = "std"</code>.</p></dd>
 
 
 <dt id="arg-study-period">study_period<a class="anchor" aria-label="anchor" href="#arg-study-period"></a></dt>
@@ -74,7 +77,10 @@
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>data.frame</code> of standardised anomalies for the study period,
-  with rows containing all-NA removed.</p>
+  with rows containing all-NA removed. Each station's values are
+  standardised against its own monthly reference (see
+  <code><a href="sealevel_compute_monthly_stats.html">sealevel_compute_monthly_stats()</a></code>), not a value pooled across
+  stations.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

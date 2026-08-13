@@ -35,7 +35,7 @@ the ACI curve and zero.}
 A \code{ggplot} object.
 }
 \description{
-Draws a line chart of the monthly ACI values returned by
+Draws a line chart of the ACI values returned by
 \code{\link{calculate_aci}}, with an optional smoothed
 trend and a horizontal zero reference line.
 }

@@ -271,7 +271,7 @@ utils::globalVariables(c("value", "period", "component", "lon", "lat", "ACI"))
 
 #' Plot the ACI global time series
 #'
-#' Draws a line chart of the monthly ACI values returned by
+#' Draws a line chart of the ACI values returned by
 #' \code{\link{calculate_aci}}, with an optional smoothed
 #' trend and a horizontal zero reference line.
 #'
@@ -388,7 +388,7 @@ plot_aci_timeseries <- function(aci_df,
 #' make up the ACI.
 #'
 #' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}
-#'   with \code{area = TRUE}
+#'   with \code{area = TRUE}.
 #' @param type    \code{"stacked"} (default), \code{"line"} or \code{"bar"}.
 #' @param components Character vector of component names to include.
 #'   Default: all six \code{c("t90","t10","precipitation","drought","wind","sealevel")}.
@@ -518,7 +518,8 @@ plot_aci_components <- function(aci_df,
 #' \strong{violin plots} (\code{type = "violin"}), or
 #' \strong{density curves} (\code{type = "density"}).
 #'
-#' @param aci_df     A \code{data.frame} returned by \code{calculate_aci()}.
+#' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}
+#'   with \code{area = TRUE}.
 #' @param components Character vector of component columns to include.
 #' @param include_aci Logical. If \code{TRUE}, adds the composite \code{ACI}
 #'   column to the distribution plot alongside the components. Default
@@ -642,7 +643,8 @@ plot_aci_distribution <- function(aci_df,
 #' density) into a single patchwork figure.  Requires the \pkg{patchwork}
 #' package to be installed.
 #'
-#' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}.
+#' @param aci_df  A \code{data.frame} returned by \code{calculate_aci()}
+#'   with \code{area = TRUE}.
 #' @param title   Overall figure title. Default \code{"ACI Summary Dashboard"}.
 #'
 #' @return A \pkg{patchwork} object (inherits from \code{ggplot}).

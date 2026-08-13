@@ -7,7 +7,8 @@
 plot_aci_dashboard(aci_df, title = "ACI Summary Dashboard")
 }
 \arguments{
-\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}.}
+\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
+with \code{area = TRUE}.}
 
 \item{title}{Overall figure title. Default \code{"ACI Summary Dashboard"}.}
 }

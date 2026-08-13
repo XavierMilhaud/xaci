@@ -69,7 +69,13 @@
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A named numeric vector of length 12 (one value per calendar month).</p>
+    <p>A numeric matrix, 12 rows (calendar months <code>"1"</code>-<code>"12"</code>
+  as row names) x one column per station (station names as returned by
+  <code>colnames(df)</code>). Each station is standardised against its own
+  monthly reference statistics, independently of the other stations –
+  consistent with how the other ACI components (ERA5 grid cells,
+  administrative units) are each standardised against their own
+  reference, not a value pooled across the whole spatial domain.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

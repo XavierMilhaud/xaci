@@ -14,7 +14,7 @@ plot_aci_components(
 }
 \arguments{
 \item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
-with \code{area = TRUE}}
+with \code{area = TRUE}.}
 
 \item{type}{\code{"stacked"} (default), \code{"line"} or \code{"bar"}.}
 

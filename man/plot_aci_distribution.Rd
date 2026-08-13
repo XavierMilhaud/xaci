@@ -14,7 +14,8 @@ plot_aci_distribution(
 )
 }
 \arguments{
-\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}.}
+\item{aci_df}{A \code{data.frame} returned by \code{calculate_aci()}
+with \code{area = TRUE}.}
 
 \item{components}{Character vector of component columns to include.}
 

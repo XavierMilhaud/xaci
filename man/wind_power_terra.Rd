@@ -9,7 +9,8 @@ wind_power_terra(
   v10_r,
   reference_period = NULL,
   mask_path = NULL,
-  threshold = 0.8
+  threshold = 0.8,
+  target_chunk_gb = 1
 )
 }
 \arguments{
@@ -24,6 +25,9 @@ If provided, only the reference sub-period is returned.}
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
 
 \item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
+
+\item{target_chunk_gb}{Passed to \code{resample_daily_terra()} (see its
+memory note) for memory-safe temporal chunking of large hourly series.}
 }
 \value{
 Same structure as \code{wind_power()}: \code{list(data, time, lon, lat)}.

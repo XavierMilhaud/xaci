@@ -65,7 +65,8 @@ list format.</p>
 <span>  <span class="va">v10_r</span>,</span>
 <span>  reference_period <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mask_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  threshold <span class="op">=</span> <span class="fl">0.8</span></span>
+<span>  threshold <span class="op">=</span> <span class="fl">0.8</span>,</span>
+<span>  target_chunk_gb <span class="op">=</span> <span class="fl">1</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -91,6 +92,11 @@ If provided, only the reference sub-period is returned.</p></dd>
 
 <dt id="arg-threshold">threshold<a class="anchor" aria-label="anchor" href="#arg-threshold"></a></dt>
 <dd><p>Numeric threshold for the mask. Default <code>0.8</code>.</p></dd>
+
+
+<dt id="arg-target-chunk-gb">target_chunk_gb<a class="anchor" aria-label="anchor" href="#arg-target-chunk-gb"></a></dt>
+<dd><p>Passed to <code><a href="resample_daily_terra.html">resample_daily_terra()</a></code> (see its
+memory note) for memory-safe temporal chunking of large hourly series.</p></dd>
 
 </dl></div>
     <div class="section level2">

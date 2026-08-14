@@ -24,15 +24,18 @@ NULL
 #'   que separement sur u10_r et v10_r.
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
 #' @inheritParams wind_power
 #' @return Same structure as \code{wind_power()}: \code{list(data, time, lon, lat)}.
 #' @export
 wind_power_terra <- function(u10_r, v10_r, reference_period = NULL,
-                             mask_path = NULL, threshold = 0.8) {
+                             mask_path = NULL, threshold = 0.8,
+                             target_chunk_gb = 1) {
   rho <- 1.23  # air density kg/m3
 
-  u_daily_r <- resample_daily_terra(u10_r, fun = "mean")
-  v_daily_r <- resample_daily_terra(v10_r, fun = "mean")
+  u_daily_r <- resample_daily_terra(u10_r, fun = "mean", target_chunk_gb = target_chunk_gb)
+  v_daily_r <- resample_daily_terra(v10_r, fun = "mean", target_chunk_gb = target_chunk_gb)
 
   ws_daily_r <- sqrt(u_daily_r^2 + v_daily_r^2)
   wp_r       <- 0.5 * rho * ws_daily_r^3
@@ -71,14 +74,18 @@ wind_power_terra <- function(u10_r, v10_r, reference_period = NULL,
 #' @param u10_r,v10_r \code{terra::SpatRaster}, hourly resolution, non masque.
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
 #' @inheritParams calculate_period_wind_exceedance_frequency
 #' @return Same as \code{calculate_period_wind_exceedance_frequency()}.
 #' @export
 calculate_period_wind_exceedance_frequency_terra <- function(u10_r, v10_r,
                                                              reference_period,
                                                              mask_path = NULL,
-                                                             threshold = 0.8) {
-  wp    <- wind_power_terra(u10_r, v10_r, mask_path = mask_path, threshold = threshold)
+                                                             threshold = 0.8,
+                                                             target_chunk_gb = 1) {
+  wp    <- wind_power_terra(u10_r, v10_r, mask_path = mask_path, threshold = threshold,
+                            target_chunk_gb = target_chunk_gb)
   thr   <- .wind_thresholds_from_wp(wp, reference_period, wp$lon, wp$lat)
   above <- .days_above_from_wp(wp, thr, wp$lon, wp$lat)
   .monthly_frequency_from_binary(above, wp$lon, wp$lat)
@@ -91,6 +98,10 @@ calculate_period_wind_exceedance_frequency_terra <- function(u10_r, v10_r,
 #' historical periods (40+ years hourly).
 #'
 #' @inheritParams wind_component
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
+#'   Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
+#'   on macOS); raise it only if you have RAM headroom to spare.
 #' @return Same as \code{wind_component()}.
 #' @export
 wind_component_terra <- function(wind_u10_data_path,
@@ -106,7 +117,8 @@ wind_component_terra <- function(wind_u10_data_path,
                                  computed_components   = FALSE,
                                  save                  = FALSE,
                                  save_dir              = NULL,
-                                 load_dir              = NULL) {
+                                 load_dir              = NULL,
+                                 target_chunk_gb       = 1) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -126,7 +138,8 @@ wind_component_terra <- function(wind_u10_data_path,
     v10_r <- load_netcdf_terra(wind_v10_data_path, "v10")
     freq  <- calculate_period_wind_exceedance_frequency_terra(u10_r, v10_r,
                                                               reference_period,
-                                                              mask_path = mask_path)
+                                                              mask_path = mask_path,
+                                                              target_chunk_gb = target_chunk_gb)
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
       saveRDS(freq, file.path(save_dir, paste0("wind_", study_tag, ".rds")))

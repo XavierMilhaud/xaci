@@ -23,6 +23,9 @@ NULL
 #'   \code{cores} (see its performance note) -- the rolling-window percentile
 #'   step is by far the most expensive part of this function. Default
 #'   \code{1} (sequential, identical to previous behaviour).
+#' @param target_chunk_gb Passed to \code{temp_extremum_terra()} /
+#'   \code{resample_daily_terra()} (see its memory note) for memory-safe
+#'   temporal chunking of large hourly series.
 #' @inheritParams calculate_halfday_component
 #' @return Same structure as \code{calculate_halfday_component()}:
 #'   \code{list(data, time, lon, lat)}.
@@ -31,8 +34,9 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
                                               extremum, percentile,
                                               above_thresholds,
                                               mask_path = NULL, threshold = 0.8,
-                                              cores = 1L) {
-  daily_ext_r  <- temp_extremum_terra(r, extremum, part_of_day)
+                                              cores = 1L, target_chunk_gb = 1) {
+  daily_ext_r  <- temp_extremum_terra(r, extremum, part_of_day,
+                                      target_chunk_gb = target_chunk_gb)
   thresholds_r <- calculate_percentiles_terra(r, percentile, reference_period,
                                               part_of_day, cores = cores)
 
@@ -75,6 +79,10 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
 #'   \code{calculate_percentiles_terra()} (see its performance note on
 #'   \code{terra::roll()} having no built-in parallelism). Default \code{1}.
 #' @inheritParams temperature_component
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
+#'   Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
+#'   on macOS); raise it only if you have RAM headroom to spare.
 #' @return Same as \code{temperature_component()}: a standardized metric list,
 #'   or a data frame if \code{admin_mask}/\code{admin_level} is provided.
 #' @export
@@ -94,7 +102,8 @@ temperature_component_terra <- function(temperature_data_path,
                                         computed_components   = FALSE,
                                         save                  = FALSE,
                                         save_dir              = NULL,
-                                        load_dir              = NULL) {
+                                        load_dir              = NULL,
+                                        target_chunk_gb       = 1) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -120,11 +129,13 @@ temperature_component_terra <- function(temperature_data_path,
     day_comp   <- calculate_halfday_component_terra(r, reference_period, "day",
                                                     extremum, percentile,
                                                     above_thresholds, mask_path,
-                                                    cores = cores)
+                                                    cores = cores,
+                                                    target_chunk_gb = target_chunk_gb)
     night_comp <- calculate_halfday_component_terra(r, reference_period, "night",
                                                     extremum, percentile,
                                                     above_thresholds, mask_path,
-                                                    cores = cores)
+                                                    cores = cores,
+                                                    target_chunk_gb = target_chunk_gb)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,

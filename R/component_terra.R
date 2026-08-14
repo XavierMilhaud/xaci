@@ -75,6 +75,16 @@ load_netcdf_terra <- function(path, var_name) {
 #' pas de temps), le decoupage en blocs ne change pas le resultat : un pixel
 #' exclu par le masque l'est de la meme facon dans chaque bloc.
 #'
+#' \strong{Precision numerique :} \code{terra} ecrit sur disque en simple
+#' precision (\code{datatype = "FLT4S"}) PAR DEFAUT (voir
+#' \code{terra::terraOptions()}), des que le resultat ne tient pas en RAM --
+#' ce qui inclut la branche par blocs ci-dessous (TOUJOURS ecrite sur
+#' disque). Sans le \code{datatype = "FLT8S"} explicite ci-dessous, un
+#' masquage qui declenche une ecriture disque perdrait silencieusement de la
+#' precision par rapport a un masquage qui reste en RAM -- incoherence
+#' potentielle non liee au chunking lui-meme, mais au meme risque general
+#' (voir la note similaire dans \code{resample_daily_terra()}).
+#'
 #' @param r          A \code{terra::SpatRaster} (e.g. from \code{load_netcdf_terra()}).
 #' @param mask_path  Path to the mask NetCDF file (variable: \code{country}).
 #' @param threshold  Numeric threshold. Default \code{0.8}.
@@ -93,7 +103,7 @@ apply_mask_terra <- function(r, mask_path, threshold = 0.8, chunk_size = 20000) 
 
   n <- terra::nlyr(r)
   if (n <= 65535L) {
-    return(terra::mask(r, keep, maskvalue = FALSE))
+    return(terra::mask(r, keep, maskvalue = FALSE, datatype = "FLT8S"))
   }
 
   warning(
@@ -116,7 +126,7 @@ apply_mask_terra <- function(r, mask_path, threshold = 0.8, chunk_size = 20000) 
     terra::mask(
       r[[idx]], keep, maskvalue = FALSE,
       filename = tmp_files[i], overwrite = TRUE,
-      filetype = "GTiff", gdal = c("BIGTIFF=YES")
+      filetype = "GTiff", gdal = c("BIGTIFF=YES"), datatype = "FLT8S"
     )
   }
 
@@ -263,7 +273,9 @@ resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb
   out <- terra::ifel(is.infinite(out), NA, out)
 
   terra::time(out) <- as.POSIXct(day_levels, tz = "UTC")
-  if (nzchar(filename)) terra::writeRaster(out, filename, overwrite = TRUE)
+  if (nzchar(filename)) {
+    terra::writeRaster(out, filename, overwrite = TRUE, datatype = "FLT8S")
+  }
   out
 }
 
@@ -375,7 +387,9 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
   # (constate plantant empiriquement, meme sans aucune parallelisation).
   out_full <- .calculate_percentiles_terra_tiled(r_ref, n, window_size, cores)
 
-  if (nzchar(filename)) terra::writeRaster(out_full, filename, overwrite = TRUE)
+  if (nzchar(filename)) {
+    terra::writeRaster(out_full, filename, overwrite = TRUE, datatype = "FLT8S")
+  }
   out_full
 }
 

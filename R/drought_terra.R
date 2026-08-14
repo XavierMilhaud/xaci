@@ -17,10 +17,13 @@ NULL
 #'   resolution journaliere (voir note ci-dessous).
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
 #' @return Same structure as \code{max_consecutive_dry_days()}.
 #' @export
-max_consecutive_dry_days_terra <- function(r, mask_path = NULL, threshold = 0.8) {
-  daily_r <- resample_daily_terra(r, fun = "sum")
+max_consecutive_dry_days_terra <- function(r, mask_path = NULL, threshold = 0.8,
+                                           target_chunk_gb = 1) {
+  daily_r <- resample_daily_terra(r, fun = "sum", target_chunk_gb = target_chunk_gb)
 
   # Masquage APRES reduction horaire -> journaliere (et non avant, sur les
   # donnees brutes) : le masque est purement spatial, identique a chaque pas
@@ -41,6 +44,10 @@ max_consecutive_dry_days_terra <- function(r, mask_path = NULL, threshold = 0.8)
 #' Drop-in, memory-safe replacement for \code{drought_component()}.
 #'
 #' @inheritParams drought_component
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
+#'   Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
+#'   on macOS); raise it only if you have RAM headroom to spare.
 #' @return Same as \code{drought_component()}.
 #' @export
 drought_component_terra <- function(precipitation_data_path,
@@ -55,7 +62,8 @@ drought_component_terra <- function(precipitation_data_path,
                                     computed_components   = FALSE,
                                     save                  = FALSE,
                                     save_dir              = NULL,
-                                    load_dir              = NULL) {
+                                    load_dir              = NULL,
+                                    target_chunk_gb        = 1) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -72,7 +80,7 @@ drought_component_terra <- function(precipitation_data_path,
     cdd_monthly <- readRDS(path)
   } else {
     r          <- load_netcdf_terra(precipitation_data_path, "tp")
-    cdd_annual <- max_consecutive_dry_days_terra(r, mask_path)
+    cdd_annual <- max_consecutive_dry_days_terra(r, mask_path, target_chunk_gb = target_chunk_gb)
     cdd_monthly <- drought_interpolate(cdd_annual)
 
     if (save) {

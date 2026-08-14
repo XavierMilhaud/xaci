@@ -68,7 +68,8 @@ historical periods (40+ years hourly).</p>
 <span>  computed_components <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  save <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  save_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  load_dir <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  load_dir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  target_chunk_gb <span class="op">=</span> <span class="fl">1</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -135,6 +136,13 @@ period covered by the study; used to name the cached grid-cell-level
 
 <dt id="arg-load-dir">load_dir<a class="anchor" aria-label="anchor" href="#arg-load-dir"></a></dt>
 <dd><p>Character. Default <code>NULL</code>, which resolves to a sub-directory of <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>.</p></dd>
+
+
+<dt id="arg-target-chunk-gb">target_chunk_gb<a class="anchor" aria-label="anchor" href="#arg-target-chunk-gb"></a></dt>
+<dd><p>Passed to <code><a href="resample_daily_terra.html">resample_daily_terra()</a></code> (see its
+memory note) for memory-safe temporal chunking of large hourly series.
+Lower this if you still hit memory errors (e.g. <code><a href="https://rdrr.io/r/base/memlimits.html" class="external-link">mem.maxVSize()</a></code>
+on macOS); raise it only if you have RAM headroom to spare.</p></dd>
 
 </dl></div>
     <div class="section level2">

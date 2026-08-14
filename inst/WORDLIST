@@ -7,6 +7,7 @@ CONSECUTIFS
 Cette
 Climatological
 Colour
+DEFAUT
 DJF
 EPSG
 GADM
@@ -37,6 +38,7 @@ Standardised
 Standardising
 Sur
 TEMPORELLEMENT
+TOUJOURS
 UID
 UUID
 Visualisation
@@ -49,10 +51,12 @@ ainsi
 ajustable
 al
 appel
+au
 automatiquement
 bascule
 basemap
 behaviour
+branche
 c'est
 calcul
 cas
@@ -80,6 +84,7 @@ d'un
 dans
 de
 decennies
+declenche
 decoupant
 decoupe
 defaut
@@ -98,7 +103,9 @@ donnees
 du
 ecrire
 ecrit
+ecrite
 ecrits
+ecriture
 empiriquement
 entiere
 et
@@ -106,6 +113,7 @@ etant
 eviter
 exactement
 exclu
+explicite
 explicitement
 explose
 extrema
@@ -129,6 +137,7 @@ horaire
 horaires
 ici
 identique
+inclut
 independamment
 intermediaires
 interne
@@ -146,10 +155,12 @@ l'objet
 l'ordre
 le
 les
+liee
 limite
 lon
 lue
 lui
+mais
 masquage
 masquer
 materialiser
@@ -169,11 +180,13 @@ ou
 parallelisation
 parallelizing
 partir
+perdrait
 petits
 peut
 plafond
 plusieurs
 plutot
+potentielle
 pourtant
 principe
 probleme
@@ -194,6 +207,7 @@ reduites
 reprojected
 reprojecting
 requis
+reste
 resultat
 rigoureusement
 rnaturalearth
@@ -209,6 +223,8 @@ serie
 ses
 seul
 seule
+silencieusement
+similaire
 soit
 sont
 spatialement
@@ -226,6 +242,7 @@ temporelle
 temporels
 terra
 th
+tient
 traitees
 traitement
 un

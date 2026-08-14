@@ -57,7 +57,8 @@
 <span>  <span class="va">above_thresholds</span>,</span>
 <span>  mask_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  threshold <span class="op">=</span> <span class="fl">0.8</span>,</span>
-<span>  cores <span class="op">=</span> <span class="fl">1L</span></span>
+<span>  cores <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>  target_chunk_gb <span class="op">=</span> <span class="fl">1</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -106,6 +107,12 @@ reduites (voir note ci-dessous).</p></dd>
 <code>cores</code> (see its performance note) – the rolling-window percentile
 step is by far the most expensive part of this function. Default
 <code>1</code> (sequential, identical to previous behaviour).</p></dd>
+
+
+<dt id="arg-target-chunk-gb">target_chunk_gb<a class="anchor" aria-label="anchor" href="#arg-target-chunk-gb"></a></dt>
+<dd><p>Passed to <code><a href="temp_extremum_terra.html">temp_extremum_terra()</a></code> /
+<code><a href="resample_daily_terra.html">resample_daily_terra()</a></code> (see its memory note) for memory-safe
+temporal chunking of large hourly series.</p></dd>
 
 </dl></div>
     <div class="section level2">

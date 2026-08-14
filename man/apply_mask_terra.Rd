@@ -36,4 +36,14 @@ recombines en une seule source multi-fichiers, sans jamais materialiser
 l'ensemble en RAM. Le masque etant purement spatial (identique a chaque
 pas de temps), le decoupage en blocs ne change pas le resultat : un pixel
 exclu par le masque l'est de la meme facon dans chaque bloc.
+
+\strong{Precision numerique :} \code{terra} ecrit sur disque en simple
+precision (\code{datatype = "FLT4S"}) PAR DEFAUT (voir
+\code{terra::terraOptions()}), des que le resultat ne tient pas en RAM --
+ce qui inclut la branche par blocs ci-dessous (TOUJOURS ecrite sur
+disque). Sans le \code{datatype = "FLT8S"} explicite ci-dessous, un
+masquage qui declenche une ecriture disque perdrait silencieusement de la
+precision par rapport a un masquage qui reste en RAM -- incoherence
+potentielle non liee au chunking lui-meme, mais au meme risque general
+(voir la note similaire dans \code{resample_daily_terra()}).
 }

@@ -4,7 +4,12 @@
 \alias{max_consecutive_dry_days_terra}
 \title{Calculate maximum consecutive dry days (terra version)}
 \usage{
-max_consecutive_dry_days_terra(r, mask_path = NULL, threshold = 0.8)
+max_consecutive_dry_days_terra(
+  r,
+  mask_path = NULL,
+  threshold = 0.8,
+  target_chunk_gb = 1
+)
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster}, hourly (or sub-daily)
@@ -15,6 +20,9 @@ resolution journaliere (voir note ci-dessous).}
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
 
 \item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
+
+\item{target_chunk_gb}{Passed to \code{resample_daily_terra()} (see its
+memory note) for memory-safe temporal chunking of large hourly series.}
 }
 \value{
 Same structure as \code{max_consecutive_dry_days()}.

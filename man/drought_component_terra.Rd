@@ -17,7 +17,8 @@ drought_component_terra(
   computed_components = FALSE,
   save = FALSE,
   save_dir = NULL,
-  load_dir = NULL
+  load_dir = NULL,
+  target_chunk_gb = 1
 )
 }
 \arguments{
@@ -61,6 +62,11 @@ recomputing. Default \code{FALSE}.}
 \item{save_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 
 \item{load_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
+
+\item{target_chunk_gb}{Passed to \code{resample_daily_terra()} (see its
+memory note) for memory-safe temporal chunking of large hourly series.
+Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
+on macOS); raise it only if you have RAM headroom to spare.}
 }
 \value{
 Same as \code{drought_component()}.

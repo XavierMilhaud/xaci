@@ -9,7 +9,8 @@ calculate_maximum_precipitation_over_window_terra(
   var_name = "tp",
   window_size = 5L,
   mask_path = NULL,
-  threshold = 0.8
+  threshold = 0.8,
+  target_chunk_gb = 1
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ inherited from ERA5 (variable name in the NetCDF).}
 \item{mask_path}{Path to the mask NetCDF file, or \code{NULL} (no masking).}
 
 \item{threshold}{Numeric threshold for the mask. Default \code{0.8}.}
+
+\item{target_chunk_gb}{Passed to \code{resample_daily_terra()} (see its
+memory note) for memory-safe temporal chunking of large hourly series.}
 }
 \value{
 Same structure as \code{calculate_maximum_precipitation_over_window()}.

@@ -17,6 +17,8 @@ NULL
 #'   journaliere (voir note ci-dessous).
 #' @param mask_path Path to the mask NetCDF file, or \code{NULL} (no masking).
 #' @param threshold Numeric threshold for the mask. Default \code{0.8}.
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
 #' @inheritParams calculate_maximum_precipitation_over_window
 #' @return Same structure as \code{calculate_maximum_precipitation_over_window()}.
 #' @export
@@ -24,8 +26,9 @@ calculate_maximum_precipitation_over_window_terra <- function(r,
                                                               var_name    = "tp",
                                                               window_size = 5L,
                                                               mask_path   = NULL,
-                                                              threshold   = 0.8) {
-  daily_r <- resample_daily_terra(r, fun = "sum")
+                                                              threshold   = 0.8,
+                                                              target_chunk_gb = 1) {
+  daily_r <- resample_daily_terra(r, fun = "sum", target_chunk_gb = target_chunk_gb)
 
   # Masquage APRES reduction horaire -> journaliere (et non avant, sur les
   # donnees brutes) : le masque est purement spatial, identique a chaque pas
@@ -45,6 +48,10 @@ calculate_maximum_precipitation_over_window_terra <- function(r,
 #'
 #' Drop-in, memory-safe replacement for \code{precipitation_component()}.
 #'
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
+#'   Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
+#'   on macOS); raise it only if you have RAM headroom to spare.
 #' @inheritParams precipitation_component
 #' @return Same as \code{precipitation_component()}.
 #' @export
@@ -62,7 +69,8 @@ precipitation_component_terra <- function(precipitation_data_path,
                                           computed_components   = FALSE,
                                           save                  = FALSE,
                                           save_dir              = NULL,
-                                          load_dir              = NULL) {
+                                          load_dir              = NULL,
+                                          target_chunk_gb       = 1) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -80,7 +88,7 @@ precipitation_component_terra <- function(precipitation_data_path,
   } else {
     r <- load_netcdf_terra(precipitation_data_path, var_name)
     period_max <- calculate_maximum_precipitation_over_window_terra(
-      r, var_name, window_size, mask_path = mask_path
+      r, var_name, window_size, mask_path = mask_path, target_chunk_gb = target_chunk_gb
     )
     if (save) {
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)

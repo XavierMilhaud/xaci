@@ -151,20 +151,54 @@ load_component_terra <- function(data_path, var_name, mask_path = NULL,
 #' Resample a SpatRaster to daily resolution (terra version)
 #'
 #' Equivalent of \code{resample_daily()}. Groups layers by calendar day and
-#' applies \code{fun}, writing the result to disk chunk-by-chunk via
-#' \code{terra::tapp()} rather than holding the full input in RAM.
+#' applies \code{fun} via \code{terra::tapp()}.
+#'
+#' \strong{Memory note :} pour agreger par jour, \code{terra::tapp()} doit
+#' lire, PAR BLOC SPATIAL, la serie temporelle COMPLETE de \code{r}
+#' (\code{readValues()} recupere \code{nrows x ncol x nlyr(r)} valeurs d'un
+#' coup, puis \code{matrix()} en fait une copie contigue). Sur une grille
+#' pourtant petite (quelques milliers de cellules), \code{nlyr(r)} horaire
+#' sur plusieurs decennies (des centaines de milliers de couches) suffit a
+#' lui seul a depasser la limite memoire d'un processus R (constate
+#' empiriquement : plafond de 16 Go de R sous macOS, "vector memory limit ...
+#' reached", pour ~65 ans horaires sur la France entiere) -- MEME quand le
+#' resultat final (agrege par jour) est minuscule. C'est exactement la meme
+#' classe de probleme que celle documentee pour \code{terra::roll()} dans
+#' \code{.calculate_percentiles_terra_tiled()} : le pic memoire depend de la
+#' taille de L'ENTREE lue par bloc, pas de la sortie. On applique donc ici le
+#' meme principe, en decoupant TEMPORELLEMENT (et non spatialement, puisque
+#' c'est le nombre de couches qui explose ici, pas le nombre de cellules) :
+#' \code{r} est scinde en blocs de jours CONSECUTIFS (donc de couches
+#' horaires contigues -- l'ordre chronologique de \code{r} est requis),
+#' chaque bloc est agrege independamment et ecrit sur disque, puis les blocs
+#' journaliers (petits) sont recombines. Le resultat est identique, bloc par
+#' bloc ou en un seul appel : chaque jour est agrege a partir de ses propres
+#' couches horaires, jamais a cheval sur deux blocs.
+#'
+#' \strong{Precision numerique :} les blocs intermediaires sont ecrits sur
+#' disque en \code{datatype = "FLT8S"} (double precision, 64 bits) --
+#' explicitement force pour eviter que \code{terra} ne bascule par defaut
+#' sur du float 32 bits, ce qui romprait l'invariance du resultat par
+#' rapport a \code{target_chunk_gb} (chemin non-decoupe = calcul garde en
+#' RAM, en double precision R). Le resultat est ainsi, a l'arithmetique
+#' flottante pres (memes operations, meme ordre par groupe), rigoureusement
+#' identique quel que soit le nombre de blocs.
 #'
 #' @param r        A \code{terra::SpatRaster} with \code{terra::time()} set
-#'   (sub-daily time steps expected).
+#'   (sub-daily time steps expected), sorted chronologically.
 #' @param fun      Aggregation function name understood by \code{terra::tapp()}
 #'   (e.g. \code{"mean"}, \code{"sum"}, \code{"max"}, \code{"min"}).
-#' @param filename Optional path to write the result directly to disk (highly
-#'   recommended for large jobs). Default \code{""} (terra decides, using a
-#'   temp file if the result doesn't fit in memory).
+#' @param filename Optional path to write the final result directly to disk
+#'   (highly recommended for large jobs). Default \code{""} (terra decides).
+#' @param target_chunk_gb Target raw INPUT size (GB) per temporal chunk, used
+#'   to decide how many chunks are needed for memory safety. Conservative
+#'   default \code{1} -- lower it further if you still see
+#'   \code{mem.maxVSize()}/OOM crashes on your machine; raise it (fewer,
+#'   larger chunks, faster overall) only if you have RAM headroom to spare.
 #' @return A \code{terra::SpatRaster} with one layer per day.
 #' @export
-#' @importFrom terra time tapp
-resample_daily_terra <- function(r, fun = "mean", filename = "") {
+#' @importFrom terra time tapp nlyr ncell rast writeRaster
+resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb = 1) {
   day_key    <- format(terra::time(r), "%Y-%m-%d")
   day_levels <- unique(day_key)              # ordre chronologique (r est trie par temps)
   day_idx    <- factor(day_key, levels = day_levels)
@@ -181,7 +215,47 @@ resample_daily_terra <- function(r, fun = "mean", filename = "") {
   # -> NA ci-dessous -- purement du bruit puisque ce cas est deja gere.
   fun_narm <- function(x, ...) suppressWarnings(base_fun(x, na.rm = TRUE))
 
-  out <- terra::tapp(r, index = day_idx, fun = fun_narm, filename = "")
+  total_gb    <- (as.numeric(terra::ncell(r)) * terra::nlyr(r) * 8) / 1024^3
+  n_days      <- length(day_levels)
+  n_chunks    <- min(max(1L, ceiling(total_gb / target_chunk_gb)), n_days)
+
+  if (n_chunks <= 1L) {
+    out <- terra::tapp(r, index = day_idx, fun = fun_narm, filename = "")
+  } else {
+    message(sprintf(
+      "[resample_daily_terra] %d couches (~%.2f Go), decoupe en %d bloc(s) temporel(s) de jours consecutifs pour plafonner le pic memoire.",
+      terra::nlyr(r), total_gb, n_chunks
+    ))
+
+    day_breaks <- floor(seq(0, n_days, length.out = n_chunks + 1L))
+    tmp_dir    <- tempfile("resample_daily_chunks_")
+    dir.create(tmp_dir)
+    tmp_files  <- character(n_chunks)
+
+    for (i in seq_len(n_chunks)) {
+      d_idx   <- (day_breaks[i] + 1L):day_breaks[i + 1L]
+      d_sel   <- day_levels[d_idx]
+      keep    <- day_key %in% d_sel                     # couches horaires du bloc (contigues)
+      sub_idx <- factor(day_key[keep], levels = d_sel)
+
+      tmp_files[i] <- file.path(tmp_dir, sprintf("chunk_%04d.tif", i))
+      terra::tapp(r[[keep]], index = sub_idx, fun = fun_narm,
+                  filename = tmp_files[i], overwrite = TRUE,
+                  wopt = list(filetype = "GTiff", gdal = c("BIGTIFF=YES"),
+                              datatype = "FLT8S"))
+      # IMPORTANT : filetype/gdal/datatype DOIVENT passer par
+      # wopt=list(...) -- passes en arguments nommes directs a
+      # tapp(), ils sont silencieusement absorbes par "..." et
+      # transmis (sans effet) a fun_narm() au lieu d'atteindre
+      # writeRaster(). Bug constate empiriquement : sans wopt,
+      # terra ecrivait en float32 par defaut malgre datatype =
+      # "FLT8S" affiche en argument direct (voir le test de
+      # non-regression : ecarts de l'ordre de l'epsilon float32,
+      # ~4.8e-7, entre le chemin decoupe et le chemin en RAM).
+    }
+
+    out <- terra::rast(tmp_files)
+  }
 
   # Miroir de resample_daily() (component.R), maintenant corrigee :
   # is.infinite() attrape -Inf (FUN = max sur journee entierement NA) ET
@@ -206,9 +280,11 @@ resample_daily_terra <- function(r, fun = "mean", filename = "") {
 #' @param period   \code{"day"} (hours 6-21) or \code{"night"} (hours 0-5 and
 #'   22-23).
 #' @param filename Optional output path (see \code{resample_daily_terra()}).
+#' @param target_chunk_gb Passed to \code{resample_daily_terra()} (see its
+#'   memory note) for memory-safe temporal chunking of large hourly series.
 #' @return A \code{terra::SpatRaster} with one layer per day.
 #' @export
-temp_extremum_terra <- function(r, extremum, period, filename = "") {
+temp_extremum_terra <- function(r, extremum, period, filename = "", target_chunk_gb = 1) {
   hours <- as.integer(format(terra::time(r), "%H"))
   keep <- if (period == "day") {
     hours %in% 6:21
@@ -222,7 +298,8 @@ temp_extremum_terra <- function(r, extremum, period, filename = "") {
   else if (extremum == "min") "min"
   else stop("'extremum' must be 'min' or 'max'")
 
-  resample_daily_terra(r[[keep]], fun = fun, filename = filename)
+  resample_daily_terra(r[[keep]], fun = fun, filename = filename,
+                       target_chunk_gb = target_chunk_gb)
 }
 
 #' Compute temperature percentile thresholds for each day of year (terra version)

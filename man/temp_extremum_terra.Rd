@@ -5,7 +5,7 @@
 \title{Compute daily temperature extremum (min or max) for day or night hours
 (terra version)}
 \usage{
-temp_extremum_terra(r, extremum, period, filename = "")
+temp_extremum_terra(r, extremum, period, filename = "", target_chunk_gb = 1)
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster}, hourly resolution, with
@@ -17,6 +17,9 @@ temp_extremum_terra(r, extremum, period, filename = "")
 22-23).}
 
 \item{filename}{Optional output path (see \code{resample_daily_terra()}).}
+
+\item{target_chunk_gb}{Passed to \code{resample_daily_terra()} (see its
+memory note) for memory-safe temporal chunking of large hourly series.}
 }
 \value{
 A \code{terra::SpatRaster} with one layer per day.

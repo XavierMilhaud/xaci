@@ -90,7 +90,9 @@ load_netcdf_terra <- function(path, var_name) {
 #' @param threshold  Numeric threshold. Default \code{0.8}.
 #' @param chunk_size Nombre max de couches traitees par bloc quand
 #'   \code{nlyr(r)} depasse 65535. Default \code{20000} (marge confortable
-#'   sous la limite, ajustable selon la RAM/disque disponibles).
+#'   sous la limite, ajustable selon la RAM/disque disponibles). Une valeur
+#'   superieure a 65535 est silencieusement plafonnee a 65535, puisque
+#'   chaque bloc est lui-meme ecrit en GeoTIFF et soumis a cette meme limite.
 #' @return The masked \code{terra::SpatRaster}.
 #' @export
 #' @importFrom terra rast compareGeom resample mask nlyr time writeRaster
@@ -104,6 +106,14 @@ apply_mask_terra <- function(r, mask_path, threshold = 0.8, chunk_size = 20000) 
   n <- terra::nlyr(r)
   if (n <= 65535L) {
     return(terra::mask(r, keep, maskvalue = FALSE, datatype = "FLT8S"))
+  }
+
+  # Chaque bloc est lui-meme ecrit en GeoTIFF et est donc soumis a la meme
+  # limite de 65535 couches. Un chunk_size superieur a cette limite ferait
+  # echouer terra::mask() sur le bloc (voir test_apply_mask_terra_regression.R,
+  # chunk_size = 69999L) : on le plafonne silencieusement ici.
+  if (chunk_size > 65535L) {
+    chunk_size <- 65535L
   }
 
   warning(

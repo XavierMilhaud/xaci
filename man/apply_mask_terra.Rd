@@ -15,7 +15,9 @@ apply_mask_terra(r, mask_path, threshold = 0.8, chunk_size = 20000)
 
 \item{chunk_size}{Nombre max de couches traitees par bloc quand
 \code{nlyr(r)} depasse 65535. Default \code{20000} (marge confortable
-sous la limite, ajustable selon la RAM/disque disponibles).}
+sous la limite, ajustable selon la RAM/disque disponibles). Une valeur
+superieure a 65535 est silencieusement plafonnee a 65535, puisque
+chaque bloc est lui-meme ecrit en GeoTIFF et soumis a cette meme limite.}
 }
 \value{
 The masked \code{terra::SpatRaster}.

@@ -1,6 +1,6 @@
 Package: xaci
 Title: Actuarial Climate Index
-Version: 0.1.0
+Version: 1.1.0
 Authors@R: c(
     person("Xavier", "Milhaud", , "xavier.milhaud.research@gmail.com", role = c("aut", "cre", "ctb")),
     person("Dabakh", "Kane", , "kanedabakh55@gmail.com", role = "ctb"),

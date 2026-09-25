@@ -71,18 +71,61 @@ NULL
   }
 
   aci_data <- array(NA_real_, c(nl, nw, nt))
-  sl_data  <- if (!is.null(comp_sl)) comp_sl$data else
-    array(0, c(nl, nw, nt))
+
+  if (is.null(comp_sl)) {
+    # Pas de composant sealevel : alpha = 0 partout (deja gere ci-dessus),
+    # et la colonne "sealevel" reportee en sortie est une matrice de zeros,
+    # de la meme forme que les autres composantes.
+    sl_aligned <- array(0, c(nl, nw, nt))
+  } else {
+    sl_data <- comp_sl$data
+
+    # `comp_sl` peut avoir une resolution temporelle differente (mensuelle,
+    # une tranche par mois de donnees maregraphiques PSMSL) de celle des
+    # autres composantes (journaliere, cf. temperature_component()/
+    # temp_extremum() : "[lon x lat x days] and daily time"). Si
+    # `comp_sl$time` est fourni, on aligne chaque pas de temps de
+    # comp_t_high sur le mois correspondant de comp_sl -- exactement comme
+    # le font deja le mode national (merge par date) et le mode
+    # administratif (match(dates, ...)) plus bas dans ce fichier -- plutot
+    # que de supposer une correspondance positionnelle terme a terme,
+    # source du bug "subscript out of bounds" quand `nt` (journalier)
+    # depasse le nombre de mois disponibles dans sl_data.
+    # Si `comp_sl$time` est absent (cas historique, ex. tests unitaires
+    # fournissant un tableau deja de longueur `nt`), on suppose que
+    # l'appelant a deja pre-aligne le tableau et on garde la
+    # correspondance positionnelle 1:1 d'origine.
+    sl_idx <- if (!is.null(comp_sl$time)) {
+      match(format(as.Date(comp_t_high$time), "%Y-%m"),
+            format(as.Date(comp_sl$time),     "%Y-%m"))
+    } else {
+      seq_len(nt)
+    }
+
+    sl_aligned <- array(NA_real_, c(nl, nw, nt))
+    for (t in seq_len(nt)) {
+      # sl_idx[t] peut etre NA si le mois du jour `t` n'a pas de donnee
+      # sealevel correspondante (hors plage PSMSL, etc.) : traite comme
+      # "pas de signal sealevel ce jour-la".
+      sl_aligned[, , t] <- if (is.na(sl_idx[t])) {
+        matrix(NA_real_, nrow = nl, ncol = nw)
+      } else {
+        sl_data[, , sl_idx[t]]
+      }
+    }
+  }
 
   for (t in seq_len(nt)) {
     # NB: en R, `0 * NA` vaut `NA`, pas `0`. Or `alpha` est precisement
-    # defini comme 0 la ou `sl_data` est NA (cellules non cotieres / sans
-    # signal sealevel). Sans neutraliser ces NA, `alpha * sl_data` reste NA
+    # defini comme 0 la ou `sl_aligned` est NA (cellules non cotieres / sans
+    # signal sealevel). Sans neutraliser ces NA, `alpha * sl_t` reste NA
     # meme quand alpha = 0, et cette NA contamine `num` (et donc `ACI`)
     # POUR TOUTES LES CELLULES, y compris celles loin de toute cote -
     # potentiellement rendant l'array ACI entierement NA si sealevel est
     # NA partout (pas de stations marégraphiques chargees/disponibles).
-    sl_t <- sl_data[, , t]
+    # Ce remplacement par 0 n'est qu'un calcul interne pour le numerateur :
+    # la colonne "sealevel" reportee en sortie (sl_aligned) garde les NA.
+    sl_t <- sl_aligned[, , t]
     sl_t[is.na(sl_t)] <- 0
 
     num <- comp_t_high$data[, , t] -
@@ -106,7 +149,7 @@ NULL
   out[["precipitation"]] <- comp_prec$data
   out[["drought"]]       <- comp_drought$data
   out[["wind"]]          <- comp_wind$data
-  out[["sealevel"]]      <- sl_data
+  out[["sealevel"]]      <- sl_aligned
   out
 }
 

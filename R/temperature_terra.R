@@ -26,6 +26,9 @@ NULL
 #' @param target_chunk_gb Passed to \code{temp_extremum_terra()} /
 #'   \code{resample_daily_terra()} (see its memory note) for memory-safe
 #'   temporal chunking of large hourly series.
+#' @param window_days Passed to \code{calculate_percentiles_terra()}: width,
+#'   in days, of the rolling window used to compute the percentile
+#'   threshold. Default \code{5L}.
 #' @inheritParams calculate_halfday_component
 #' @return Same structure as \code{calculate_halfday_component()}:
 #'   \code{list(data, time, lon, lat)}.
@@ -34,11 +37,18 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
                                               extremum, percentile,
                                               above_thresholds,
                                               mask_path = NULL, threshold = 0.8,
-                                              cores = 1L, target_chunk_gb = 1) {
+                                              cores = 1L, target_chunk_gb = 1,
+                                              window_days = 5L) {
+  # Extremum quotidien (jour ou nuit) -- calcule UNE SEULE fois, puis reutilise
+  # a la fois comme variable testee et comme base du seuil de percentile, afin
+  # de garantir que les deux portent sur la meme grandeur (voir le correctif
+  # de bug documente dans calculate_percentiles_terra()).
   daily_ext_r  <- temp_extremum_terra(r, extremum, part_of_day,
                                       target_chunk_gb = target_chunk_gb)
-  thresholds_r <- calculate_percentiles_terra(r, percentile, reference_period,
-                                              part_of_day, cores = cores)
+  thresholds_r <- calculate_percentiles_terra(daily_ext_r, percentile,
+                                              reference_period,
+                                              window_days = window_days,
+                                              cores = cores)
 
   # Conversion Kelvin -> Celsius APRES reduction (et non sur r brut, hourly,
   # en amont) : max/min et quantile sont tous deux INVARIANTS PAR
@@ -83,6 +93,9 @@ calculate_halfday_component_terra <- function(r, reference_period, part_of_day,
 #'   memory note) for memory-safe temporal chunking of large hourly series.
 #'   Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
 #'   on macOS); raise it only if you have RAM headroom to spare.
+#' @param window_days Passed to \code{calculate_percentiles_terra()}: width,
+#'   in days, of the rolling window used to compute the percentile
+#'   threshold. Default \code{5L}.
 #' @return Same as \code{temperature_component()}: a standardized metric list,
 #'   or a data frame if \code{admin_mask}/\code{admin_level} is provided.
 #' @export
@@ -103,7 +116,8 @@ temperature_component_terra <- function(temperature_data_path,
                                         save                  = FALSE,
                                         save_dir              = NULL,
                                         load_dir              = NULL,
-                                        target_chunk_gb       = 1) {
+                                        target_chunk_gb       = 1,
+                                        window_days           = 5L) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -130,12 +144,14 @@ temperature_component_terra <- function(temperature_data_path,
                                                     extremum, percentile,
                                                     above_thresholds, mask_path,
                                                     cores = cores,
-                                                    target_chunk_gb = target_chunk_gb)
+                                                    target_chunk_gb = target_chunk_gb,
+                                                    window_days = window_days)
     night_comp <- calculate_halfday_component_terra(r, reference_period, "night",
                                                     extremum, percentile,
                                                     above_thresholds, mask_path,
                                                     cores = cores,
-                                                    target_chunk_gb = target_chunk_gb)
+                                                    target_chunk_gb = target_chunk_gb,
+                                                    window_days = window_days)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,

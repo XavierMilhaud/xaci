@@ -5,24 +5,27 @@
 \title{Compute temperature percentile thresholds for each day of year (terra version)}
 \usage{
 calculate_percentiles_terra(
-  r,
+  r_daily,
   n,
   reference_period,
-  part_of_day,
+  window_days = 5L,
   filename = "",
   cores = 1L
 )
 }
 \arguments{
-\item{r}{A \code{terra::SpatRaster}, hourly resolution, with
-\code{terra::time()} set (replaces the \code{dataset} argument of the
-base-R version).}
+\item{r_daily}{A \code{terra::SpatRaster}, \strong{daily} resolution
+(typically the output of \code{temp_extremum_terra()}), with
+\code{terra::time()} set. \strong{Not} the raw hourly raster.}
 
 \item{n}{Percentile (e.g. 90 or 10).}
 
 \item{reference_period}{Character vector \code{c("YYYY-MM-DD", "YYYY-MM-DD")}.}
 
-\item{part_of_day}{\code{"day"} or \code{"night"}.}
+\item{window_days}{Width, in days, of the window used to pool
+neighbouring calendar days before taking the percentile (e.g. 5 pools
+\eqn{\pm}{+/-}2 days around each calendar day). Default \code{5L},
+matching the standard CLIMDEX/ACI convention.}
 
 \item{filename}{Optional output path for the final thresholds.}
 
@@ -41,31 +44,52 @@ tiles run at once.}
 A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 }
 \description{
-Equivalent of \code{calculate_percentiles()}. \strong{More experimental than
-the other functions in this file}: it relies on \code{terra::roll()} for
-the rolling-window quantile, whose exact argument names have changed across
-terra versions -- check \code{?terra::roll} against your installed version
-(\code{packageVersion("terra")}) and validate on a small subset before
-running on the full 40-year series.
+Equivalent of \code{calculate_percentiles()}.
 }
 \details{
-\strong{Performance AND memory note:} the rolling-window quantile
-(\code{terra::roll()}) is by far the most expensive step of the whole
-\code{*_terra} pipeline -- it invokes a custom R callback
-(\code{stats::quantile()}) at every timestep of \code{reference_period}
-(filtered to day/night hours), for every cell. \strong{Crucially, a
-single \code{terra::roll()} call over a whole country's grid can crash R
-from memory pressure alone, with NO parallelism involved} -- observed
-empirically even with \code{cores = 1} on a 16GB machine, for a France-wide
-grid with 13 years of reference data filtered to daytime hours
-(\code{window_size = 80}). Because of this, the raster is now ALWAYS
-split into small spatial tiles sized to a conservative, fixed memory
-target (see \code{target_tile_gb} in
-\code{.calculate_percentiles_terra_tiled()}), regardless of \code{cores}
--- \code{cores} only controls how many of those already-memory-safe tiles
-run concurrently (default \code{1}: one at a time). Unlike
-\code{terra::tapp()}, \code{terra::roll()} has no built-in \code{cores}
-argument in the terra version this package was tested against (1.7.65) --
-there is no GPU path either (neither terra/GDAL nor base R ship a GPU
-rolling-quantile primitive).
+\strong{Bug fix #1 (see NEWS):} this function used to take the raw
+\strong{hourly} raster, filter it to day/night hours, and compute the
+rolling-window percentile directly on those hourly values (with
+\code{window_size} expressed in hours: 80 for day, 40 for night) --
+while \code{calculate_halfday_component_terra()} compared the resulting
+threshold to a \strong{daily} max/min. Because the daily extremum of
+~16 (or 8) hourly values almost always crosses the 90th (or 10th)
+percentile of the hourly distribution, this made the exceedance
+frequency during the reference period itself massively higher than the
+intended ~10%. \code{calculate_percentiles_terra()} now takes the
+already-reduced \strong{daily} extremum raster (the output of
+\code{temp_extremum_terra()}) as input, with \code{window_days}
+expressed in \strong{days} (default 5), so the threshold and the tested
+variable are computed from the same daily quantity.
+
+\strong{Bug fix #2 (see NEWS):} even after bug fix #1, the threshold was
+still computed as a rolling-window \code{n}-th percentile
+(\code{terra::roll()}) followed by a \strong{second} \code{n}-th
+percentile of those already-extreme rolled values, grouped by
+day-of-year (\code{terra::tapp()}). This two-stage procedure
+systematically under-counts the true exceedance frequency (observed
+~5.6% instead of ~10% on synthetic data, even with bug fix #1 alone
+applied) -- see \code{calculate_percentiles()} (base-R engine) for the
+full explanation and numeric illustration, which applies identically
+here. \code{calculate_percentiles_terra()} now instead pools the RAW
+daily values within \code{window_days} of a given calendar day, across
+ALL years of the reference period, and takes a SINGLE
+\code{terra::app()} quantile of that pooled sample per cell, per
+calendar day -- the standard CLIMDEX/ACI methodology. This also removes
+the \code{terra::roll()}/\code{terra::tapp()} dependency for this
+function entirely (simpler, and no longer sensitive to
+\code{terra::roll()}'s argument names changing across terra versions).
+
+\strong{Performance AND memory note:} looping over 366 calendar days and
+calling \code{terra::app()} on a (typically ~100-200 layer) subset of the
+reference period for each is comparable in total workload to the single
+whole-series \code{terra::roll()} call used before bug fix #2, but
+touches far fewer layers per call. A single such call over a whole
+country's grid could still, in principle, use substantial memory for a
+large grid -- as a precaution the raster is still ALWAYS split into small
+spatial tiles sized to a conservative, fixed memory target (see
+\code{target_tile_gb} in \code{.calculate_percentiles_terra_tiled()}),
+regardless of \code{cores} -- \code{cores} only controls how many of
+those already-memory-safe tiles run concurrently (default \code{1}: one
+at a time).
 }

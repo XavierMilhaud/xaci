@@ -144,11 +144,11 @@ this argument in either case.}
 \item{cores}{Positive integer, default \code{1}. Only used when
 \code{engine = "terra"}, and only by \code{temperature_component_terra()}
 (passed through to \code{calculate_percentiles_terra()}'s own
-\code{cores} -- see its performance note: the rolling-window percentile
-step has no built-in parallelism in terra itself, so this is where
-parallelizing across spatial tiles helps most). Silently ignored for
-\code{engine = "base"} and for the other three components, which don't
-have a \code{cores} argument.}
+\code{cores} -- see its performance note: it controls how many
+memory-safe spatial tiles are processed concurrently, which is where
+parallelizing helps most). Silently ignored for \code{engine = "base"}
+and for the other three components, which don't have a \code{cores}
+argument.}
 }
 \value{
 \describe{

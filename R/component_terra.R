@@ -326,37 +326,58 @@ temp_extremum_terra <- function(r, extremum, period, filename = "", target_chunk
 
 #' Compute temperature percentile thresholds for each day of year (terra version)
 #'
-#' Equivalent of \code{calculate_percentiles()}. \strong{More experimental than
-#' the other functions in this file}: it relies on \code{terra::roll()} for
-#' the rolling-window quantile, whose exact argument names have changed across
-#' terra versions -- check \code{?terra::roll} against your installed version
-#' (\code{packageVersion("terra")}) and validate on a small subset before
-#' running on the full 40-year series.
+#' Equivalent of \code{calculate_percentiles()}.
 #'
-#' \strong{Performance AND memory note:} the rolling-window quantile
-#' (\code{terra::roll()}) is by far the most expensive step of the whole
-#' \code{*_terra} pipeline -- it invokes a custom R callback
-#' (\code{stats::quantile()}) at every timestep of \code{reference_period}
-#' (filtered to day/night hours), for every cell. \strong{Crucially, a
-#' single \code{terra::roll()} call over a whole country's grid can crash R
-#' from memory pressure alone, with NO parallelism involved} -- observed
-#' empirically even with \code{cores = 1} on a 16GB machine, for a France-wide
-#' grid with 13 years of reference data filtered to daytime hours
-#' (\code{window_size = 80}). Because of this, the raster is now ALWAYS
-#' split into small spatial tiles sized to a conservative, fixed memory
-#' target (see \code{target_tile_gb} in
-#' \code{.calculate_percentiles_terra_tiled()}), regardless of \code{cores}
-#' -- \code{cores} only controls how many of those already-memory-safe tiles
-#' run concurrently (default \code{1}: one at a time). Unlike
-#' \code{terra::tapp()}, \code{terra::roll()} has no built-in \code{cores}
-#' argument in the terra version this package was tested against (1.7.65) --
-#' there is no GPU path either (neither terra/GDAL nor base R ship a GPU
-#' rolling-quantile primitive).
+#' \strong{Bug fix #1 (see NEWS):} this function used to take the raw
+#' \strong{hourly} raster, filter it to day/night hours, and compute the
+#' rolling-window percentile directly on those hourly values (with
+#' \code{window_size} expressed in hours: 80 for day, 40 for night) --
+#' while \code{calculate_halfday_component_terra()} compared the resulting
+#' threshold to a \strong{daily} max/min. Because the daily extremum of
+#' ~16 (or 8) hourly values almost always crosses the 90th (or 10th)
+#' percentile of the hourly distribution, this made the exceedance
+#' frequency during the reference period itself massively higher than the
+#' intended ~10%. \code{calculate_percentiles_terra()} now takes the
+#' already-reduced \strong{daily} extremum raster (the output of
+#' \code{temp_extremum_terra()}) as input, with \code{window_days}
+#' expressed in \strong{days} (default 5), so the threshold and the tested
+#' variable are computed from the same daily quantity.
+#'
+#' \strong{Bug fix #2 (see NEWS):} even after bug fix #1, the threshold was
+#' still computed as a rolling-window \code{n}-th percentile
+#' (\code{terra::roll()}) followed by a \strong{second} \code{n}-th
+#' percentile of those already-extreme rolled values, grouped by
+#' day-of-year (\code{terra::tapp()}). This two-stage procedure
+#' systematically under-counts the true exceedance frequency (observed
+#' ~5.6% instead of ~10% on synthetic data, even with bug fix #1 alone
+#' applied) -- see \code{calculate_percentiles()} (base-R engine) for the
+#' full explanation and numeric illustration, which applies identically
+#' here. \code{calculate_percentiles_terra()} now instead pools the RAW
+#' daily values within \code{window_days} of a given calendar day, across
+#' ALL years of the reference period, and takes a SINGLE
+#' \code{terra::app()} quantile of that pooled sample per cell, per
+#' calendar day -- the standard CLIMDEX/ACI methodology. This also removes
+#' the \code{terra::roll()}/\code{terra::tapp()} dependency for this
+#' function entirely (simpler, and no longer sensitive to
+#' \code{terra::roll()}'s argument names changing across terra versions).
+#'
+#' \strong{Performance AND memory note:} looping over 366 calendar days and
+#' calling \code{terra::app()} on a (typically ~100-200 layer) subset of the
+#' reference period for each is comparable in total workload to the single
+#' whole-series \code{terra::roll()} call used before bug fix #2, but
+#' touches far fewer layers per call. A single such call over a whole
+#' country's grid could still, in principle, use substantial memory for a
+#' large grid -- as a precaution the raster is still ALWAYS split into small
+#' spatial tiles sized to a conservative, fixed memory target (see
+#' \code{target_tile_gb} in \code{.calculate_percentiles_terra_tiled()}),
+#' regardless of \code{cores} -- \code{cores} only controls how many of
+#' those already-memory-safe tiles run concurrently (default \code{1}: one
+#' at a time).
 #'
 #' @inheritParams calculate_percentiles
-#' @param r A \code{terra::SpatRaster}, hourly resolution, with
-#'   \code{terra::time()} set (replaces the \code{dataset} argument of the
-#'   base-R version).
+#' @param r_daily A \code{terra::SpatRaster}, \strong{daily} resolution
+#'   (typically the output of \code{temp_extremum_terra()}), with
+#'   \code{terra::time()} set. \strong{Not} the raw hourly raster.
 #' @param filename Optional output path for the final thresholds.
 #' @param cores How many spatial tiles to process IN PARALLEL (a ceiling,
 #'   further capped by \code{.safe_cores_terra()} based on RAM available and
@@ -371,31 +392,20 @@ temp_extremum_terra <- function(r, extremum, period, filename = "", target_chunk
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @export
 #' @importFrom terra time roll tapp
-calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
+calculate_percentiles_terra <- function(r_daily, n, reference_period,
+                                        window_days = 5L,
                                         filename = "", cores = 1L) {
-  window_size <- if (part_of_day == "day") {
-    80L
-  } else if (part_of_day == "night") {
-    40L
-  } else {
-    stop("'part_of_day' must be 'day' or 'night'")
-  }
-
-  hours <- as.integer(format(terra::time(r), "%H"))
-  keep  <- if (part_of_day == "day") hours %in% 6:21 else hours %in% c(0:5, 22:23)
-  r_sub <- r[[keep]]
-
   ref_start <- as.POSIXct(reference_period[1], tz = "UTC")
   ref_end   <- as.POSIXct(reference_period[2], tz = "UTC")
-  ref_mask  <- terra::time(r_sub) >= ref_start & terra::time(r_sub) <= ref_end
-  r_ref     <- r_sub[[ref_mask]]
+  ref_mask  <- terra::time(r_daily) >= ref_start & terra::time(r_daily) <= ref_end
+  r_ref     <- r_daily[[ref_mask]]
 
   # Toujours passer par .calculate_percentiles_terra_tiled() : le decoupage
   # en tuiles protege la memoire INDEPENDAMMENT de cores (voir sa doc) --
   # cores = 1 ne doit PAS court-circuiter ce decoupage, sous peine de
   # retomber sur un seul appel terra::roll() geant sur la grille entiere
   # (constate plantant empiriquement, meme sans aucune parallelisation).
-  out_full <- .calculate_percentiles_terra_tiled(r_ref, n, window_size, cores)
+  out_full <- .calculate_percentiles_terra_tiled(r_ref, n, window_days, cores)
 
   if (nzchar(filename)) {
     terra::writeRaster(out_full, filename, overwrite = TRUE, datatype = "FLT8S")
@@ -411,12 +421,15 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 #' the sequential path -- parallelism only changes HOW the computation is
 #' split across processes, never the computation itself.
 #'
-#' @param r_ref SpatRaster, already filtered to day/night hours and to
+#' @param r_ref SpatRaster, DAILY resolution (already reduced from hourly
+#'   data via \code{temp_extremum_terra()}), already filtered to
 #'   \code{reference_period}, with \code{terra::time()} set.
 #' @param n Percentile (0-100).
-#' @param window_size Rolling window size (80 for day, 40 for night).
-#' @param cores_tapp Passed to \code{terra::tapp()}'s own \code{cores}
-#'   argument for the day-of-year grouping step. Kept separate from the
+#' @param window_size Width, in DAYS, of the window used to pool
+#'   neighbouring calendar days before taking the percentile (default 5,
+#'   i.e. \eqn{\pm}{+/-}2 days, matching the CLIMDEX/ACI convention).
+#' @param cores_tapp Number of processes handed to \code{terra::app()} for
+#'   each of the 366 per-day-of-year calls. Kept separate from the
 #'   tiling-level \code{cores} of \code{calculate_percentiles_terra()}: when
 #'   called from within a tiling worker, this should stay \code{1} to avoid
 #'   nesting parallel clusters inside parallel workers.
@@ -425,69 +438,38 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 .calculate_percentiles_terra_core <- function(r_ref, n, window_size, cores_tapp = 1L) {
   qfun <- function(x, ...) stats::quantile(x, probs = n / 100, na.rm = TRUE)
 
-  # Quantile glissant (fenetre centree, window_size pas de temps), traite par
-  # blocs par terra -- jamais charge en entier en RAM.
-  #
-  # CORRECTIF VALIDE EMPIRIQUEMENT (voir tests/compare_window_alignment.R) :
-  # pour une largeur PAIRE (80/40), zoo::rollapply(align = "center") centre
-  # la fenetre sur i + 0.5, alors que terra::roll(type = "around") la centre
-  # sur i - 0.5 -- un decalage constant de 1 pas. On corrige en decalant la
-  # serie roulee d'une couche (rolled_shifted[i] <- rolled[i + 1]) AVANT
-  # l'agregation par jour-de-l'annee, pour retrouver exactement la meme
-  # convention que la version base-R/zoo. La derniere couche devient NA
-  # (il n'existe pas de i+1 pour la derniere position).
-  rolled <- terra::roll(r_ref, n = window_size, fun = qfun,
-                        type = "around", circular = FALSE)
-
-  nt_ref <- terra::nlyr(rolled)
-  pad <- rolled[[nt_ref]]
-  terra::values(pad) <- NA
-  rolled <- c(rolled[[2:nt_ref]], pad)   # decalage de +1 pas (voir note ci-dessus)
-
-  # CORRECTIF 2 (voir tests/compare_percentiles.R -- residu localise aux
-  # bords de la periode de reference) : zoo::rollapply(fill = NA) exige une
-  # fenetre COMPLETE de window_size valeurs et renvoie NA sinon ; terra::roll
-  # semble calculer une valeur avec une fenetre partielle sur ces memes
-  # positions de bord. On force donc explicitement NA sur les positions ou
-  # zoo n'aurait pas assez de recul/avance, pour imposer la meme regle
-  # stricte quel que soit le comportement interne de terra::roll.
-  o_left  <- (window_size - 1) %/% 2
-  o_right <- window_size - 1 - o_left
-  invalid <- c(seq_len(o_left), seq(nt_ref - o_right + 1, nt_ref))
-  invalid <- invalid[invalid >= 1 & invalid <= nt_ref]
-
-  if (length(invalid) > 0) {
-    na_layer <- rolled[[1]]
-    terra::values(na_layer) <- NA
-    for (k in invalid) rolled[[k]] <- na_layer   # remplace la couche k en place
-  }
-
   day_ref <- as.integer(format(terra::time(r_ref), "%j"))
-  day_idx <- factor(day_ref, levels = 1:366)
+  nt_ref  <- terra::nlyr(r_ref)
+  half    <- window_size %/% 2
 
-  out <- terra::tapp(rolled, index = day_idx, fun = qfun, filename = "",
-                     cores = cores_tapp)
-
-  # CORRECTIF 3 : quand un jour-de-l'annee (typiquement le 366e, sur des annees non bissextiles)
-  # n'apparait jamais dans la periode de reference, terra::tapp() ne produit
-  # une couche QUE pour les groupes reellement presents -- contrairement a la
-  # version base-R qui alloue toujours un tableau [.., 366] avec NA pour les
-  # jours absents. On reconstruit donc explicitement une sortie a 366
-  # couches, en placant chaque couche calculee a la bonne position (jour de
-  # l'annee) et en completant le reste avec des couches NA.
-  present_days <- sort(unique(day_ref))
-  if (terra::nlyr(out) != length(present_days)) {
-    stop("Nombre de couches renvoyees par terra::tapp() incoherent avec le ",
-         "nombre de jours-de-l'annee presents dans la periode de reference ",
-         "-- le comportement de terra::tapp() sur les niveaux de facteur ",
-         "vides a peut-etre change pour votre version de terra ",
-         "(", as.character(utils::packageVersion("terra")), ").")
-  }
-
-  na_layer <- out[[1]]
+  na_layer <- r_ref[[1]]
   terra::values(na_layer) <- NA
-  layers <- rep(list(na_layer), 366)
-  for (k in seq_along(present_days)) layers[[present_days[k]]] <- out[[k]]
+
+  # BUG FIX (voir la note dans calculate_percentiles_terra()) : au lieu d'un
+  # quantile glissant PUIS d'un quantile des valeurs deja-glissees
+  # (terra::roll() + terra::tapp(), une methode a deux etages qui biaise le
+  # seuil final vers des valeurs trop extremes), on regroupe directement les
+  # valeurs BRUTES tombant dans une fenetre de +/- half jours autour de
+  # CHAQUE occurrence d'un jour-de-l'annee donne, sur TOUTES les annees de la
+  # periode de reference, et on prend UN SEUL quantile de cet echantillon
+  # poole, par cellule -- la methodologie CLIMDEX/ACI standard. On boucle
+  # explicitement sur les 366 jours-de-l'annee (plutot que de s'appuyer sur
+  # terra::tapp() par facteur), ce qui produit naturellement une sortie a
+  # 366 couches y compris pour les jours absents de la periode de reference
+  # (ex. le 366e sur des annees non bissextiles), sans post-traitement.
+  layers <- vector("list", 366)
+  for (d in 1:366) {
+    occ <- which(day_ref == d)
+    if (length(occ) == 0) {
+      layers[[d]] <- na_layer
+      next
+    }
+    window_idx <- unique(unlist(lapply(occ, function(k) {
+      lo <- max(1L, k - half); hi <- min(nt_ref, k + half)
+      lo:hi
+    })))
+    layers[[d]] <- terra::app(r_ref[[window_idx]], fun = qfun, cores = cores_tapp)
+  }
 
   terra::rast(layers)
 }
@@ -654,11 +636,16 @@ calculate_percentiles_terra <- function(r, n, reference_period, part_of_day,
 #'   Conservative default \code{0.15} -- deliberately small: a single ~1.5GB
 #'   tile (i.e. no tiling at all) was observed to crash R on a 16GB machine
 #'   for the "day" part of \code{temperature_component_terra()} (percentile
-#'   90/above_thresholds), where \code{window_size = 80} makes
-#'   \code{terra::roll()}'s actual peak memory well above what raw data size
-#'   alone would suggest. Lower this further if you still see crashes; raise
-#'   it (fewer, larger tiles) only if you have headroom to spare and want
-#'   fewer, faster per-tile calls.
+#'   90/above_thresholds), back when \code{r_ref} still held \strong{hourly}
+#'   data (\code{window_size = 80}) -- \code{terra::roll()}'s actual peak
+#'   memory was well above what raw data size alone would suggest. Since
+#'   \code{r_ref} is now DAILY data (see the bug-fix note in
+#'   \code{calculate_percentiles_terra()}), the input is roughly 16-24x
+#'   smaller and this scenario is far less likely to recur, but the
+#'   conservative default is kept as-is since tiling remains harmless (only
+#'   changes how the work is split, never the result). Lower this further if
+#'   you still see crashes; raise it (fewer, larger tiles) only if you have
+#'   headroom to spare and want fewer, faster per-tile calls.
 #' @return A \code{terra::SpatRaster} with 366 layers (day-of-year 1-366).
 #' @noRd
 .calculate_percentiles_terra_tiled <- function(r_ref, n, window_size, cores,

@@ -22,7 +22,8 @@ temperature_component_terra(
   save = FALSE,
   save_dir = NULL,
   load_dir = NULL,
-  target_chunk_gb = 1
+  target_chunk_gb = 1,
+  window_days = 5L
 )
 }
 \arguments{
@@ -71,6 +72,10 @@ distinct runs over different study windows don't collide or get mixed up.}
 memory note) for memory-safe temporal chunking of large hourly series.
 Lower this if you still hit memory errors (e.g. \code{mem.maxVSize()}
 on macOS); raise it only if you have RAM headroom to spare.}
+
+\item{window_days}{Passed to \code{calculate_percentiles_terra()}: width,
+in days, of the rolling window used to compute the percentile
+threshold. Default \code{5L}.}
 }
 \value{
 Same as \code{temperature_component()}: a standardized metric list,

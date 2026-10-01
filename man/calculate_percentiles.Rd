@@ -4,21 +4,66 @@
 \alias{calculate_percentiles}
 \title{Compute temperature percentile thresholds for each day of year}
 \usage{
-calculate_percentiles(dataset, n, reference_period, part_of_day)
+calculate_percentiles(daily_dataset, n, reference_period, window_days = 5L)
 }
 \arguments{
-\item{dataset}{Full sub-daily \code{t2m} dataset (list).}
+\item{daily_dataset}{List with \code{data} [lon x lat x days] and daily
+\code{time}, as returned by \code{temp_extremum()} -- i.e. the daily
+TX (for T90) or TN (for T10) series, \strong{not} the raw hourly
+dataset.}
 
 \item{n}{Percentile (e.g. 90 or 10).}
 
 \item{reference_period}{Character vector \code{c("YYYY-MM-DD", "YYYY-MM-DD")}.}
 
-\item{part_of_day}{\code{"day"} or \code{"night"}.}
+\item{window_days}{Width, in days, of the window used to pool
+neighbouring calendar days before taking the percentile (e.g. 5 pools
+\eqn{\pm}{+/-}2 days around each calendar day). Default \code{5L},
+matching the standard CLIMDEX/ACI convention.}
 }
 \value{
-A named numeric vector of length 366 (day-of-year 1–366).
+A numeric array \code{[lon x lat x 366]} (day-of-year 1-366).
 }
 \description{
-Uses a rolling window over the reference period followed by a
-group by day-of-year percentile.
+Uses a rolling window (in \strong{days}) over the reference period,
+followed by a group-by-day-of-year percentile. Matches the CLIMDEX / ACI
+methodology (see \code{ACI (2018)}, Appendix A of Garrido et al.): the
+threshold for a given calendar day is the \code{n}-th percentile of the
+\strong{daily} TX/TN values falling within a window of \code{window_days}
+days (default 5, i.e. \eqn{\pm}{+/-}2 days) around that calendar day,
+pooled across all years of the reference period.
+}
+\details{
+\strong{Bug fix #1 (see NEWS):} earlier versions of this function computed
+the rolling window/percentile on \strong{hourly} \code{t2m} values (with
+\code{window_size} expressed in hours: 80 for day, 40 for night), then
+compared the resulting threshold to a \strong{daily} extremum in
+\code{.crossing_frequency()}. Since the daily max (or min) of ~16 (or 8)
+hourly values almost always exceeds (or falls below) the 90th (or 10th)
+percentile of the marginal hourly distribution, this made the exceedance
+frequency during the reference period itself massively higher than the
+intended ~10% (observed ~70-85% on synthetic data), instead of recovering
+the reference frequency approximately by construction. \code{calculate_percentiles()}
+now takes the already-reduced \strong{daily} extremum series (the output
+of \code{temp_extremum()}) as input, so the threshold and the tested
+variable are computed from the same daily quantity.
+
+\strong{Bug fix #2 (see NEWS):} even after bug fix #1, the threshold was
+still computed as a \strong{percentile of rolling percentiles}: a
+\code{window_days}-wide rolling \code{n}-th percentile was first applied
+along the daily series, and a \strong{second} \code{n}-th percentile was
+then taken of those already-extreme rolled values, grouped by
+day-of-year across reference years. This two-stage procedure is
+systematically biased: taking the \code{n}-th percentile of a set of
+local \code{n}-th percentiles pushes the final threshold further into the
+tail than a single, direct percentile would, so it under-counts the true
+exceedance frequency (observed ~5.6% instead of ~10% on synthetic data,
+even with bug fix #1 alone applied). The standard CLIMDEX/ACI methodology
+instead \strong{pools the raw daily values} that fall within
+\code{window_days} of a given calendar day, across \strong{all} years of
+the reference period, into a single sample, and takes \strong{one}
+percentile of that pooled sample. \code{calculate_percentiles()} now
+follows this pooling approach (no more rolling window / \code{zoo}
+dependency for this function), which empirically recovers the intended
+~10% exceedance frequency on the reference period itself.
 }

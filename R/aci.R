@@ -256,11 +256,11 @@ NULL
 #' @param cores Positive integer, default \code{1}. Only used when
 #'   \code{engine = "terra"}, and only by \code{temperature_component_terra()}
 #'   (passed through to \code{calculate_percentiles_terra()}'s own
-#'   \code{cores} -- see its performance note: the rolling-window percentile
-#'   step has no built-in parallelism in terra itself, so this is where
-#'   parallelizing across spatial tiles helps most). Silently ignored for
-#'   \code{engine = "base"} and for the other three components, which don't
-#'   have a \code{cores} argument.
+#'   \code{cores} -- see its performance note: it controls how many
+#'   memory-safe spatial tiles are processed concurrently, which is where
+#'   parallelizing helps most). Silently ignored for \code{engine = "base"}
+#'   and for the other three components, which don't have a \code{cores}
+#'   argument.
 #' @return
 #'   \describe{
 #'     \item{National scalar (\code{area = TRUE}, \code{admin_level = NULL})}{
@@ -394,9 +394,9 @@ calculate_aci <- function(country_abbrev,
   #
   # cores : uniquement utilise quand engine = "terra", et seulement par
   # temperature_component_terra() -- transmis a calculate_percentiles_terra(),
-  # dont l'etape de quantile glissant (terra::roll()) est de loin la plus
-  # couteuse du pipeline terra et n'a aucune parallelisation native (voir
-  # ?calculate_percentiles_terra). Ignore silencieusement pour engine = "base"
+  # qui plafonne toujours la memoire par decoupage en tuiles spatiales (voir
+  # ?calculate_percentiles_terra) ; cores controle combien de ces tuiles
+  # tournent en parallele. Ignore silencieusement pour engine = "base"
   # (temperature_component() de base n'a pas ce parametre).
   engine            <- match.arg(engine)
   component_fns     <- .resolve_component_functions(engine)

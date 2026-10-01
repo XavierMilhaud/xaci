@@ -10,7 +10,8 @@ calculate_halfday_component(
   part_of_day,
   extremum,
   percentile,
-  above_thresholds
+  above_thresholds,
+  window_days = 5L
 )
 }
 \arguments{
@@ -26,6 +27,10 @@ calculate_halfday_component(
 
 \item{above_thresholds}{Logical. \code{TRUE} counts days above the threshold
 (hot extremes); \code{FALSE} counts days below (cold extremes).}
+
+\item{window_days}{Passed to \code{calculate_percentiles()}: width,
+in days, of the rolling window used to compute the percentile
+threshold. Default \code{5L}.}
 }
 \value{
 A list with \code{data} [lon × lat × months] and monthly \code{time}.

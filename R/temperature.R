@@ -35,45 +35,76 @@ temp_extremum <- function(dataset, extremum, period) {
 
 #' Compute temperature percentile thresholds for each day of year
 #'
-#' Uses a rolling window over the reference period followed by a
-#' group by day-of-year percentile.
+#' Uses a rolling window (in \strong{days}) over the reference period,
+#' followed by a group-by-day-of-year percentile. Matches the CLIMDEX / ACI
+#' methodology (see \code{ACI (2018)}, Appendix A of Garrido et al.): the
+#' threshold for a given calendar day is the \code{n}-th percentile of the
+#' \strong{daily} TX/TN values falling within a window of \code{window_days}
+#' days (default 5, i.e. \eqn{\pm}{+/-}2 days) around that calendar day,
+#' pooled across all years of the reference period.
 #'
-#' @param dataset          Full sub-daily \code{t2m} dataset (list).
+#' \strong{Bug fix #1 (see NEWS):} earlier versions of this function computed
+#' the rolling window/percentile on \strong{hourly} \code{t2m} values (with
+#' \code{window_size} expressed in hours: 80 for day, 40 for night), then
+#' compared the resulting threshold to a \strong{daily} extremum in
+#' \code{.crossing_frequency()}. Since the daily max (or min) of ~16 (or 8)
+#' hourly values almost always exceeds (or falls below) the 90th (or 10th)
+#' percentile of the marginal hourly distribution, this made the exceedance
+#' frequency during the reference period itself massively higher than the
+#' intended ~10% (observed ~70-85% on synthetic data), instead of recovering
+#' the reference frequency approximately by construction. \code{calculate_percentiles()}
+#' now takes the already-reduced \strong{daily} extremum series (the output
+#' of \code{temp_extremum()}) as input, so the threshold and the tested
+#' variable are computed from the same daily quantity.
+#'
+#' \strong{Bug fix #2 (see NEWS):} even after bug fix #1, the threshold was
+#' still computed as a \strong{percentile of rolling percentiles}: a
+#' \code{window_days}-wide rolling \code{n}-th percentile was first applied
+#' along the daily series, and a \strong{second} \code{n}-th percentile was
+#' then taken of those already-extreme rolled values, grouped by
+#' day-of-year across reference years. This two-stage procedure is
+#' systematically biased: taking the \code{n}-th percentile of a set of
+#' local \code{n}-th percentiles pushes the final threshold further into the
+#' tail than a single, direct percentile would, so it under-counts the true
+#' exceedance frequency (observed ~5.6% instead of ~10% on synthetic data,
+#' even with bug fix #1 alone applied). The standard CLIMDEX/ACI methodology
+#' instead \strong{pools the raw daily values} that fall within
+#' \code{window_days} of a given calendar day, across \strong{all} years of
+#' the reference period, into a single sample, and takes \strong{one}
+#' percentile of that pooled sample. \code{calculate_percentiles()} now
+#' follows this pooling approach (no more rolling window / \code{zoo}
+#' dependency for this function), which empirically recovers the intended
+#' ~10% exceedance frequency on the reference period itself.
+#'
+#' @param daily_dataset    List with \code{data} [lon x lat x days] and daily
+#'   \code{time}, as returned by \code{temp_extremum()} -- i.e. the daily
+#'   TX (for T90) or TN (for T10) series, \strong{not} the raw hourly
+#'   dataset.
 #' @param n                Percentile (e.g. 90 or 10).
 #' @param reference_period Character vector \code{c("YYYY-MM-DD", "YYYY-MM-DD")}.
-#' @param part_of_day      \code{"day"} or \code{"night"}.
-#' @return A named numeric vector of length 366 (day-of-year 1–366).
+#' @param window_days      Width, in days, of the window used to pool
+#'   neighbouring calendar days before taking the percentile (e.g. 5 pools
+#'   \eqn{\pm}{+/-}2 days around each calendar day). Default \code{5L},
+#'   matching the standard CLIMDEX/ACI convention.
+#' @return A numeric array \code{[lon x lat x 366]} (day-of-year 1-366).
 #' @export
-calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
-  if (part_of_day == "day") {
-    window_size <- 80L
-    hours <- as.integer(format(dataset$time, "%H"))
-    keep  <- hours %in% 6:21
-  } else if (part_of_day == "night") {
-    window_size <- 40L
-    hours <- as.integer(format(dataset$time, "%H"))
-    keep  <- hours %in% c(0:5, 22:23)
-  } else {
-    stop("'part_of_day' must be 'day' or 'night'")
-  }
-
+calculate_percentiles <- function(daily_dataset, n, reference_period,
+                                  window_days = 5L) {
   ref_start <- as.POSIXct(reference_period[1], tz = "UTC")
   ref_end   <- as.POSIXct(reference_period[2], tz = "UTC")
 
-  time_sub <- dataset$time[keep]
-  data_sub <- dataset$data[, , keep, drop = FALSE]
+  time_all <- daily_dataset$time
+  data_all <- daily_dataset$data
 
-  ref_mask <- time_sub >= ref_start & time_sub <= ref_end
-  time_ref <- time_sub[ref_mask]
-  data_ref <- data_sub[, , ref_mask, drop = FALSE]
+  ref_mask <- time_all >= ref_start & time_all <= ref_end
+  time_ref <- time_all[ref_mask]
+  data_ref <- data_all[, , ref_mask, drop = FALSE]
 
   dims <- dim(data_ref)
   nl   <- dims[1]; nw <- dims[2]; nt <- dims[3]
 
-  # Rolling percentile then group by day-of-year percentile
-  # For each spatial cell, apply rolling window of size window_size then
-  # aggregate by day to get 366 threshold values.
   day_ref <- as.integer(format(time_ref, "%j"))
+  half    <- window_days %/% 2
 
   thresholds <- array(NA_real_, c(nl, nw, 366))
 
@@ -81,16 +112,21 @@ calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
     for (j in seq_len(nw)) {
       series <- data_ref[i, j, ]
       if (all(is.na(series))) next
-      # Rolling percentile (centred)
-      rolled <- zoo::rollapply(series, width = window_size,
-                               FUN = function(x) quantile(x, probs = n / 100,
-                                                          na.rm = TRUE),
-                               fill = NA, align = "center")
-      # Percentile of rolled values per day
       for (d in 1:366) {
-        idx <- which(day_ref == d)
-        if (length(idx) == 0) next
-        thresholds[i, j, d] <- quantile(rolled[idx], probs = n / 100,
+        occ <- which(day_ref == d)
+        if (length(occ) == 0) next
+        # Pool the RAW daily values within +/- half calendar days of EVERY
+        # occurrence of day-of-year d across the reference period (i.e. the
+        # actual consecutive dates in the time series, correctly spanning
+        # year boundaries via clamping at the very start/end of the whole
+        # series), then take a SINGLE percentile of that pooled sample --
+        # the standard CLIMDEX/ACI approach, instead of a percentile of
+        # rolling percentiles (see bug fix #2 above).
+        window_idx <- unique(unlist(lapply(occ, function(k) {
+          lo <- max(1L, k - half); hi <- min(nt, k + half)
+          lo:hi
+        })))
+        thresholds[i, j, d] <- quantile(series[window_idx], probs = n / 100,
                                         na.rm = TRUE)
       }
     }
@@ -107,16 +143,24 @@ calculate_percentiles <- function(dataset, n, reference_period, part_of_day) {
 #' @param percentile       Numeric percentile (e.g. 90 or 10).
 #' @param above_thresholds Logical. \code{TRUE} counts days above the threshold
 #'   (hot extremes); \code{FALSE} counts days below (cold extremes).
+#' @param window_days      Passed to \code{calculate_percentiles()}: width,
+#'   in days, of the rolling window used to compute the percentile
+#'   threshold. Default \code{5L}.
 #' @return A list with \code{data} [lon × lat × months] and monthly \code{time}.
 #' @export
 calculate_halfday_component <- function(dataset, reference_period, part_of_day,
-                                        extremum, percentile, above_thresholds) {
-  # Daily extremum for the chosen part of day
+                                        extremum, percentile, above_thresholds,
+                                        window_days = 5L) {
+  # Daily extremum for the chosen part of day -- computed ONCE, then reused
+  # both as the tested variable and as the basis for the percentile
+  # threshold, so both are guaranteed to be the same quantity.
   daily_ext <- temp_extremum(dataset, extremum, part_of_day)
 
-  # Percentile thresholds [lon x lat x 366]
-  thresholds_day <- calculate_percentiles(dataset, percentile,
-                                          reference_period, part_of_day)
+  # Percentile thresholds [lon x lat x 366], computed from the DAILY
+  # extremum series (not from raw hourly values -- see calculate_percentiles()).
+  thresholds_day <- calculate_percentiles(daily_ext, percentile,
+                                          reference_period,
+                                          window_days = window_days)
 
   .crossing_frequency(daily_ext, thresholds_day, above_thresholds,
                       dataset$lon, dataset$lat)
@@ -197,6 +241,9 @@ calculate_halfday_component <- function(dataset, reference_period, part_of_day,
 #' @param save      Logical. Default \code{FALSE}.
 #' @param save_dir  Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
 #' @param load_dir  Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.
+#' @param window_days Passed to \code{calculate_percentiles()}: width, in
+#'   days, of the rolling window used to compute the percentile threshold.
+#'   Default \code{5L}.
 #' @return Named numeric vector, standardised list, or \code{data.frame}
 #'   per admin unit.
 #' @export
@@ -215,7 +262,8 @@ temperature_component <- function(temperature_data_path,
                                   computed_components   = FALSE,
                                   save                  = FALSE,
                                   save_dir              = NULL,
-                                  load_dir              = NULL) {
+                                  load_dir              = NULL,
+                                  window_days           = 5L) {
 
   save_dir <- .resolve_cache_dir(save_dir, file.path("xaci_results", country_abbrev))
   load_dir <- .resolve_cache_dir(load_dir, file.path("xaci_results", country_abbrev))
@@ -236,10 +284,12 @@ temperature_component <- function(temperature_data_path,
 
     day_comp   <- calculate_halfday_component(dataset, reference_period, "day",
                                               extremum, percentile,
-                                              above_thresholds)
+                                              above_thresholds,
+                                              window_days = window_days)
     night_comp <- calculate_halfday_component(dataset, reference_period, "night",
                                               extremum, percentile,
-                                              above_thresholds)
+                                              above_thresholds,
+                                              window_days = window_days)
     combined <- list(
       data = 0.5 * (day_comp$data + night_comp$data),
       time = day_comp$time,

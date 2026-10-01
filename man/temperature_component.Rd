@@ -20,7 +20,8 @@ temperature_component(
   computed_components = FALSE,
   save = FALSE,
   save_dir = NULL,
-  load_dir = NULL
+  load_dir = NULL,
+  window_days = 5L
 )
 }
 \arguments{
@@ -60,6 +61,10 @@ distinct runs over different study windows don't collide or get mixed up.}
 \item{save_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
 
 \item{load_dir}{Character. Default \code{NULL}, which resolves to a sub-directory of \code{tempdir()}.}
+
+\item{window_days}{Passed to \code{calculate_percentiles()}: width, in
+days, of the rolling window used to compute the percentile threshold.
+Default \code{5L}.}
 }
 \value{
 Named numeric vector, standardised list, or \code{data.frame}

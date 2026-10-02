@@ -157,14 +157,39 @@ sealevel_compute_monthly_stats <- function(df, reference_period, stats) {
                      levels = 1:12)
 
   compute_col <- function(col) {
+    # Nombre d'observations REELLEMENT disponibles dans la periode de
+    # reference, par mois -- distingue explicitement "0 observation"
+    # (aucune moyenne de reference definissable, station hors de la
+    # periode de reference pour ce mois) de "1 observation" (moyenne
+    # definissable, mais variance non estimable).
+    n_obs <- as.numeric(tapply(col, months, function(x) sum(!is.na(x))))
+
     if (stats == "means") {
-      as.numeric(tapply(col, months, mean, na.rm = TRUE))
+      m <- as.numeric(tapply(col, months, mean, na.rm = TRUE))
+      # BUG FIX (voir NEWS) : avec 0 observation, tapply(..., mean, na.rm=TRUE)
+      # renvoie NaN (et non NA). NaN se propage ensuite silencieusement dans
+      # sealevel_standardize_data() et n'est exclu de reduce_sealevel_over_region()
+      # que par accident (is.na(NaN) vaut TRUE en R, mais ce n'est pas un
+      # comportement explicite/documente). On force ici NA_real_, et
+      # sealevel_process() detecte et signale explicitement ces stations
+      # (voir sa documentation) plutot que de laisser faire silencieusement.
+      m[n_obs == 0] <- NA_real_
+      m
     } else if (stats == "std") {
+      # Garde-fou INCHANGE par rapport a la version d'origine : un mois avec
+      # un seul echantillon (sd indefini, NA) OU une variance reellement
+      # nulle (valeurs identiques par coincidence, sd = 0) -- y compris
+      # n_obs == 0 (aucune donnee du tout, sd = NA egalement) -- recoit un
+      # ecart-type de secours de 1. Ce choix reste volontairement
+      # INCONDITIONNEL (pas de distinction sur n_obs ici, contrairement a
+      # "means" ci-dessus) : la detection des stations sans donnee de
+      # reference (voir sealevel_process()) se fait entierement via
+      # 'means' (qui, lui, est bien NA pour n_obs == 0) -- la valeur de
+      # 'std' dans ce cas n'a aucune consequence sur le resultat final,
+      # puisque (NA - std_quelconque) reste NA. Inutile donc d'introduire
+      # ici une distinction qui casserait par ailleurs le cas legitime
+      # "variance nulle avec n_obs >= 2" (ex. deux releves identiques).
       sd_v <- as.numeric(tapply(col, months, sd, na.rm = TRUE))
-      # Meme garde-fou qu'avant : un mois avec un seul echantillon (ou
-      # aucun) dans la periode de reference pour CETTE station donne
-      # sd() = NA, ce qui propagerait des NA a toutes les lignes
-      # standardisees de CETTE station dans sealevel_standardize_data().
       sd_v[is.na(sd_v) | sd_v < .Machine$double.eps] <- 1
       sd_v
     } else {
@@ -218,11 +243,43 @@ sealevel_standardize_data <- function(df, monthly_means, monthly_std_devs,
 #' @return A named list with:
 #'   \describe{
 #'     \item{\code{data}}{Standardised \code{data.frame} of anomalies
-#'       \code{[time x stations]}, row names \code{"YYYY-MM-DD"}.}
+#'       \code{[time x stations]}, row names \code{"YYYY-MM-DD"}. Stations
+#'       listed in \code{excluded_stations} are entirely absent from this
+#'       data.frame (all-\code{NA} columns are dropped), not merely NA.}
 #'     \item{\code{coords}}{A \code{data.frame} with columns
 #'       \code{station_id}, \code{lon}, \code{lat}, one row per station
-#'       present in \code{data}.}
+#'       present in \code{data} (excluded stations are also dropped here).}
+#'     \item{\code{excluded_stations}}{Character vector of station column
+#'       names (possibly empty) that have ZERO observations in
+#'       \code{reference_period} for at least one calendar month, and are
+#'       therefore impossible to standardise against Eq. A.12 (no reference
+#'       mean is definable for that station/month) -- see the "Bug fix"
+#'       note below. Use this to know which stations (e.g. ones installed
+#'       after 1990) silently contribute nothing, so this isn't found out
+#'       by surprise downstream.}
 #'   }
+#' @section Bug fix (see NEWS):
+#' Stations with literally no data during \code{reference_period} (e.g. a
+#' tide gauge installed in 2018, for a 1961-1990 reference period) used to
+#' get a reference mean of \code{NaN} (not \code{NA}), which propagated
+#' through \code{sealevel_standardize_data()} to make \strong{the entire
+#' standardised series of that station \code{NaN}} -- including during
+#' years where the station DOES have perfectly good data. This had no
+#' visible effect only because \code{reduce_sealevel_over_region()}'s
+#' \code{rowMeans(..., na.rm = TRUE)} happens to also drop \code{NaN}
+#' (R treats \code{NaN} as a kind of \code{NA}), so the station was
+#' silently and permanently excluded from every national/regional average
+#' it could have contributed to, with no warning. For the French stations
+#' listed in Garrido et al.'s Table B.2, 12 of the 40 stations (30\%) have
+#' zero overlap with 1961-1990 and were affected. This function now (a)
+#' produces clean \code{NA} instead of \code{NaN} for this case, and more
+#' importantly (b) explicitly detects and reports these stations via
+#' \code{warning()} and the \code{excluded_stations} return value, instead
+#' of relying on an implicit, easy-to-miss floating-point coincidence.
+#' Excluding such stations is not itself a choice this function makes --
+#' there is no principled reference baseline to compute for a station that
+#' did not exist during the reference period -- but that exclusion is now
+#' visible rather than silent.
 #' @export
 sealevel_process <- function(directory, study_period, reference_period) {
 
@@ -243,10 +300,68 @@ sealevel_process <- function(directory, study_period, reference_period) {
 
   monthly_means <- sealevel_compute_monthly_stats(df, reference_period, "means")
   monthly_std   <- sealevel_compute_monthly_stats(df, reference_period, "std")
+
+  # BUG FIX (voir NEWS et la documentation ci-dessus) : detection EXPLICITE
+  # des stations sans AUCUNE donnee de reference pour au moins un mois
+  # calendaire -- impossible a standardiser pour ce(s) mois (Eq. A.12 exige
+  # une moyenne et un ecart-type de reference). On distingue :
+  #   - "jamais utilisables" (tous les 12 mois sont NA) : la station n'a
+  #     litteralement aucun recouvrement avec reference_period -- avertissement
+  #     explicite, la station sera totalement absente de la sortie.
+  #   - "partiellement utilisables" (certains mois seulement) : cas plus rare
+  #     (ex. des trous saisonniers dans les releves), avertissement plus
+  #     discret car la station contribue quand meme sur ses mois valides.
+  na_per_month   <- is.na(monthly_means)
+  n_na_months    <- colSums(na_per_month)
+  never_usable   <- colnames(monthly_means)[n_na_months == 12L]
+  partly_usable  <- colnames(monthly_means)[n_na_months > 0L & n_na_months < 12L]
+
+  if (length(never_usable) > 0) {
+    warning(
+      sprintf(
+        paste0(
+          "sealevel_process() : %d station(s) sans AUCUNE donnee sur la ",
+          "periode de reference (%s - %s), donc sans moyenne/ecart-type de ",
+          "reference definissable pour aucun mois -- elles seront ABSENTES ",
+          "de la sortie (data, coords), y compris pour leurs propres annees ",
+          "de bonnes donnees hors reference : %s"
+        ),
+        length(never_usable), reference_period[1], reference_period[2],
+        paste(never_usable, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (length(partly_usable) > 0) {
+    warning(
+      sprintf(
+        paste0(
+          "sealevel_process() : %d station(s) avec une couverture ",
+          "PARTIELLE de la periode de reference (%s - %s) -- certains mois ",
+          "calendaires n'ont aucune donnee de reference et seront NA pour ",
+          "ces mois uniquement : %s"
+        ),
+        length(partly_usable), reference_period[1], reference_period[2],
+        paste(partly_usable, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
   standardized  <- sealevel_standardize_data(df, monthly_means, monthly_std,
                                              study_period)
 
-  list(data = standardized, coords = coords)
+  # Les stations "jamais utilisables" ont desormais une colonne entierement
+  # NA dans `standardized` (plus de NaN -- voir sealevel_compute_monthly_stats()) ;
+  # on les retire explicitement de data ET de coords, plutot que de les
+  # laisser trainer comme colonnes NA silencieuses.
+  if (length(never_usable) > 0) {
+    keep_cols   <- setdiff(colnames(standardized), never_usable)
+    standardized <- standardized[, keep_cols, drop = FALSE]
+    coords       <- coords[coords$station_id %in% keep_cols, , drop = FALSE]
+  }
+
+  list(data = standardized, coords = coords, excluded_stations = never_usable)
 }
 
 

@@ -271,22 +271,36 @@ test_that("sealevel_load_metadata échoue si des colonnes requises manquent dans
 # --- sealevel_process (pipeline complet) ------------------------------------
 
 test_that("sealevel_process enchaîne chargement, nettoyage et standardisation correctement", {
-  # NB IMPORTANT (découvert en écrivant ce test, à confirmer avec l'auteur) :
   dir <- tempfile()
   dir.create(dir)
   # Station 1 = BREST (FRA), Station 3 = SHEERNESS (GBR) dans psmsl_data.csv bundlé
+  # NB : une seule observation par an (janvier uniquement) -- ce fixture ne
+  # couvre donc QUE janvier sur les 12 mois calendaires, ce qui est une
+  # couverture de reference volontairement PARTIELLE pour les 11 autres
+  # mois. Cela declenche l'avertissement "couverture PARTIELLE" de
+  # sealevel_process() (voir NEWS / bug fix stations sans donnee de
+  # reference) : attendu et sans consequence ici, puisque ce test ne
+  # verifie que le mois de janvier.
   writeLines(c("2010.0417;100;;", "2011.0417;102;;", "2012.0417;110;;"),
              file.path(dir, "1.txt"))
   writeLines(c("2010.0417;50;;", "2011.0417;54;;", "2012.0417;60;;"),
              file.path(dir, "3.txt"))
 
-  result <- sealevel_process(
-    directory         = dir,
-    study_period      = c("2010-01-01", "2012-12-31"),
-    reference_period  = c("2010-01-01", "2011-12-31")
+  result <- expect_warning(
+    sealevel_process(
+      directory         = dir,
+      study_period      = c("2010-01-01", "2012-12-31"),
+      reference_period  = c("2010-01-01", "2011-12-31")
+    ),
+    "couverture PARTIELLE"
   )
 
-  expect_named(result, c("data", "coords"))
+  # BUG FIX (voir NEWS) : sealevel_process() renvoie desormais aussi
+  # excluded_stations (stations sans AUCUNE donnee de reference, absentes
+  # de data/coords) -- vide ici, les deux stations ont des donnees de
+  # janvier sur 2010-2011.
+  expect_named(result, c("data", "coords", "excluded_stations"))
+  expect_equal(result$excluded_stations, character(0))
   expect_setequal(colnames(result$data), c("Measurement_1", "Measurement_3"))
   # coords aligné avec l'ordre des colonnes de data
   expect_equal(result$coords$station_id, colnames(result$data))

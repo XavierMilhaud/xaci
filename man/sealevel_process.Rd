@@ -17,12 +17,47 @@ sealevel_process(directory, study_period, reference_period)
 A named list with:
   \describe{
     \item{\code{data}}{Standardised \code{data.frame} of anomalies
-      \code{[time x stations]}, row names \code{"YYYY-MM-DD"}.}
+      \code{[time x stations]}, row names \code{"YYYY-MM-DD"}. Stations
+      listed in \code{excluded_stations} are entirely absent from this
+      data.frame (all-\code{NA} columns are dropped), not merely NA.}
     \item{\code{coords}}{A \code{data.frame} with columns
       \code{station_id}, \code{lon}, \code{lat}, one row per station
-      present in \code{data}.}
+      present in \code{data} (excluded stations are also dropped here).}
+    \item{\code{excluded_stations}}{Character vector of station column
+      names (possibly empty) that have ZERO observations in
+      \code{reference_period} for at least one calendar month, and are
+      therefore impossible to standardise against Eq. A.12 (no reference
+      mean is definable for that station/month) -- see the "Bug fix"
+      note below. Use this to know which stations (e.g. ones installed
+      after 1990) silently contribute nothing, so this isn't found out
+      by surprise downstream.}
   }
 }
 \description{
 Full sea-level processing pipeline
 }
+\section{Bug fix (see NEWS)}{
+
+Stations with literally no data during \code{reference_period} (e.g. a
+tide gauge installed in 2018, for a 1961-1990 reference period) used to
+get a reference mean of \code{NaN} (not \code{NA}), which propagated
+through \code{sealevel_standardize_data()} to make \strong{the entire
+standardised series of that station \code{NaN}} -- including during
+years where the station DOES have perfectly good data. This had no
+visible effect only because \code{reduce_sealevel_over_region()}'s
+\code{rowMeans(..., na.rm = TRUE)} happens to also drop \code{NaN}
+(R treats \code{NaN} as a kind of \code{NA}), so the station was
+silently and permanently excluded from every national/regional average
+it could have contributed to, with no warning. For the French stations
+listed in Garrido et al.'s Table B.2, 12 of the 40 stations (30\%) have
+zero overlap with 1961-1990 and were affected. This function now (a)
+produces clean \code{NA} instead of \code{NaN} for this case, and more
+importantly (b) explicitly detects and reports these stations via
+\code{warning()} and the \code{excluded_stations} return value, instead
+of relying on an implicit, easy-to-miss floating-point coincidence.
+Excluding such stations is not itself a choice this function makes --
+there is no principled reference baseline to compute for a station that
+did not exist during the reference period -- but that exclusion is now
+visible rather than silent.
+}
+

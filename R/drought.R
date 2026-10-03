@@ -85,10 +85,30 @@ max_consecutive_dry_days <- function(dataset) {
 
 #' Linearly interpolate annual CDD to monthly resolution
 #'
-#' For each pair of consecutive years \eqn{k} and \eqn{k+1} the monthly CDD
-#' for month \eqn{m \in 1..12} of year \eqn{k} is:
-#' \deqn{CDD_m = \frac{12-m}{12} \cdot CDD_k + \frac{m}{12} \cdot CDD_{k+1}}
-#' The last year repeats its own value for all 12 months.
+#' For month \eqn{j \in 1..11} of year \eqn{k}, the monthly CDD interpolates
+#' between the ANNUAL values of year \eqn{k-1} and year \eqn{k} (each annual
+#' value being anchored at December 31 of its own year):
+#' \deqn{CDD_j(k) = \frac{12-j}{12} \cdot CDD_{k-1} + \frac{j}{12} \cdot CDD_k}
+#' and \eqn{CDD_{12}(k) = CDD_k} exactly (December of year \eqn{k} coincides
+#' with that year's own annual anchor point). This matches Eq. (A.6) of
+#' Garrido et al. The first year, having no \eqn{k-1} to interpolate from,
+#' repeats its own annual value for all 12 months.
+#'
+#' \strong{Bug fix (see NEWS):} earlier versions of this function computed
+#' this same interpolation formula correctly, but assigned the result to
+#' the WRONG calendar year -- labelling month \eqn{j} of year
+#' \eqn{\text{years}[k]} as \code{w1 * data[,,k] + w2 * data[,,k+1]}, which
+#' is actually month \eqn{j} of year \eqn{\text{years}[k+1]} per Eq. (A.6)
+#' (whose December value must equal that year's OWN annual value, not the
+#' following year's). Verified numerically: with annual CDD values
+#' 10/20/30/40 for 2000-2003, December 2000 came out as 20 (year 2001's
+#' annual value) instead of 10 (year 2000's own value). The interpolation
+#' arithmetic itself was correct; only the year label was off by one. As a
+#' consequence, the "repeat own value for all 12 months" edge-case handling
+#' now applies to the FIRST year (which has no preceding year to interpolate
+#' from) instead of the last (which, under the corrected labelling, has no
+#' such issue: Eq. A.6 only ever needs year \eqn{k-1} to compute year
+#' \eqn{k}'s months, so the last year is computed normally).
 #'
 #' @param cdd_annual List returned by \code{max_consecutive_dry_days()}.
 #' @return A list with \code{data} [lon × lat × months] and monthly \code{time}.
@@ -103,22 +123,28 @@ drought_interpolate <- function(cdd_annual) {
   monthly_strings <- character(0)   # ← stocke les dates comme strings
   monthly_list    <- list()
 
-  for (k in seq_len(ny - 1L)) {
+  # Premiere annee : pas de k-1 disponible pour interpoler (voir la note de
+  # bug ci-dessus) -- on repete sa propre valeur annuelle sur les 12 mois,
+  # exactement comme l'ancienne version le faisait pour la DERNIERE annee
+  # (le probleme de bord se deplace du dernier au premier indice une fois
+  # l'etiquetage d'annee corrige).
+  for (m in 1:12) {
+    monthly_list[[length(monthly_list) + 1L]] <- data[, , 1L]
+    monthly_strings <- c(monthly_strings,
+                         sprintf("%d-%02d-01", years[1L], m))
+  }
+
+  # seq_len(ny - 1L) + 1L vaut integer(0) quand ny == 1 (pas d'iteration),
+  # plutot que le piege classique de `2:ny` qui vaudrait c(2, 1) dans ce cas.
+  for (k in seq_len(ny - 1L) + 1L) {
     for (m in 1:12) {
       w1     <- (12 - m) / 12
       w2     <- m / 12
-      interp <- w1 * data[, , k] + w2 * data[, , k + 1L]
+      interp <- w1 * data[, , k - 1L] + w2 * data[, , k]
       monthly_list[[length(monthly_list) + 1L]] <- interp
       monthly_strings <- c(monthly_strings,
                            sprintf("%d-%02d-01", years[k], m))
     }
-  }
-
-  # Dernière année
-  for (m in 1:12) {
-    monthly_list[[length(monthly_list) + 1L]] <- data[, , ny]
-    monthly_strings <- c(monthly_strings,
-                         sprintf("%d-%02d-01", years[ny], m))
   }
 
   # Conversion unique à la fin → pas de perte de type

@@ -7,6 +7,21 @@ NULL
 #'
 #' Wind speed = sqrt(u10^2 + v10^2), wind power = 0.5 * rho * ws^3.
 #'
+#' \strong{Bug fix (see NEWS):} earlier versions averaged \code{u10} and
+#' \code{v10} to daily means SEPARATELY first, then took the magnitude of
+#' that daily-mean vector (\code{sqrt(mean(u)^2 + mean(v)^2)}) as the "daily
+#' mean wind speed". This "vector averaging" systematically UNDER-estimates
+#' the true daily mean wind speed whenever wind direction varies over the
+#' day, because opposing (or merely differing) hourly components partially
+#' cancel out before the magnitude is taken -- e.g. a wind blowing at a
+#' constant 8 m/s whose direction oscillates by only +/-60 degrees over the
+#' day averages out to a vector magnitude of ~6 m/s, a ~58\% error on the
+#' resulting wind power (0.5*rho*w^3), verified numerically. The standard
+#' meteorological convention for a "daily mean wind speed" is instead to
+#' average the INSTANTANEOUS scalar speed \code{sqrt(u^2+v^2)} computed at
+#' each timestep, which is always positive and does not suffer from this
+#' cancellation; that is what this function now does.
+#'
 #' @param u10_dataset List returned by \code{load_component()} for \code{u10}.
 #' @param v10_dataset List returned by \code{load_component()} for \code{v10}.
 #' @param reference_period Optional character vector \code{c("start","end")}.
@@ -19,20 +34,18 @@ wind_power <- function(u10_dataset, v10_dataset, reference_period = NULL) {
 
   u <- u10_dataset$data
   v <- v10_dataset$data
-  #ws <- sqrt(u^2 + v^2)
 
-  # Resample u and v separately to daily means
-  u_list <- resample_daily(list(data = u, time = u10_dataset$time,
-                                lon = u10_dataset$lon, lat = u10_dataset$lat),
-                           FUN = mean)
-  v_list <- resample_daily(list(data = v, time = v10_dataset$time,
-                                lon = v10_dataset$lon, lat = v10_dataset$lat),
-                           FUN = mean)
+  # Vitesse instantanee (scalaire, toujours positive) calculee AVANT la
+  # moyenne journaliere -- voir la note de bug ci-dessus.
+  ws_instant <- sqrt(u^2 + v^2)
 
-  ws_daily <- sqrt(u_list$data^2 + v_list$data^2)
-  wp       <- 0.5 * rho * ws_daily^3
+  ws_list <- resample_daily(list(data = ws_instant, time = u10_dataset$time,
+                                 lon = u10_dataset$lon, lat = u10_dataset$lat),
+                            FUN = mean)
 
-  result <- list(data = wp, time = u_list$time,
+  wp <- 0.5 * rho * ws_list$data^3
+
+  result <- list(data = wp, time = ws_list$time,
                  lon = u10_dataset$lon, lat = u10_dataset$lat)
 
   if (!is.null(reference_period)) {

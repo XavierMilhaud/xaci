@@ -34,11 +34,20 @@ wind_power_terra <- function(u10_r, v10_r, reference_period = NULL,
                              target_chunk_gb = 1) {
   rho <- 1.23  # air density kg/m3
 
-  u_daily_r <- resample_daily_terra(u10_r, fun = "mean", target_chunk_gb = target_chunk_gb)
-  v_daily_r <- resample_daily_terra(v10_r, fun = "mean", target_chunk_gb = target_chunk_gb)
+  # BUG FIX (voir NEWS, et la note de bug dans wind_power(), moteur base-R) :
+  # la vitesse instantanee (scalaire, sqrt(u^2+v^2)) est calculee AVANT la
+  # reduction journaliere, et non apres (ce qui sous-estimait systematiquement
+  # la vitesse moyenne journaliere des que la direction du vent variait dans
+  # la journee -- "moyenne vectorielle"). L'algebre de raster de terra (^, +,
+  # sqrt) traite les couches par blocs nativement et preserve terra::time(),
+  # donc ce calcul sur les donnees horaires BRUTES reste memory-safe sans
+  # mecanisme supplementaire ; seule la REDUCTION temporelle (horaire ->
+  # journaliere) necessite le chunking explicite de resample_daily_terra().
+  ws_hourly_r <- sqrt(u10_r^2 + v10_r^2)
+  ws_daily_r  <- resample_daily_terra(ws_hourly_r, fun = "mean",
+                                      target_chunk_gb = target_chunk_gb)
 
-  ws_daily_r <- sqrt(u_daily_r^2 + v_daily_r^2)
-  wp_r       <- 0.5 * rho * ws_daily_r^3
+  wp_r <- 0.5 * rho * ws_daily_r^3
 
   # Masquage APRES reduction (et non sur u10_r/v10_r bruts, hourly, en
   # amont) : le masque est purement spatial (identique a chaque pas de

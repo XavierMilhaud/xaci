@@ -13,8 +13,29 @@ drought_interpolate(cdd_annual)
 A list with \code{data} [lon × lat × months] and monthly \code{time}.
 }
 \description{
-For each pair of consecutive years \eqn{k} and \eqn{k+1} the monthly CDD
-for month \eqn{m \in 1..12} of year \eqn{k} is:
-\deqn{CDD_m = \frac{12-m}{12} \cdot CDD_k + \frac{m}{12} \cdot CDD_{k+1}}
-The last year repeats its own value for all 12 months.
+For month \eqn{j \in 1..11} of year \eqn{k}, the monthly CDD interpolates
+between the ANNUAL values of year \eqn{k-1} and year \eqn{k} (each annual
+value being anchored at December 31 of its own year):
+\deqn{CDD_j(k) = \frac{12-j}{12} \cdot CDD_{k-1} + \frac{j}{12} \cdot CDD_k}
+and \eqn{CDD_{12}(k) = CDD_k} exactly (December of year \eqn{k} coincides
+with that year's own annual anchor point). This matches Eq. (A.6) of
+Garrido et al. The first year, having no \eqn{k-1} to interpolate from,
+repeats its own annual value for all 12 months.
+}
+\details{
+\strong{Bug fix (see NEWS):} earlier versions of this function computed
+this same interpolation formula correctly, but assigned the result to
+the WRONG calendar year -- labelling month \eqn{j} of year
+\eqn{\text{years}[k]} as \code{w1 * data[,,k] + w2 * data[,,k+1]}, which
+is actually month \eqn{j} of year \eqn{\text{years}[k+1]} per Eq. (A.6)
+(whose December value must equal that year's OWN annual value, not the
+following year's). Verified numerically: with annual CDD values
+10/20/30/40 for 2000-2003, December 2000 came out as 20 (year 2001's
+annual value) instead of 10 (year 2000's own value). The interpolation
+arithmetic itself was correct; only the year label was off by one. As a
+consequence, the "repeat own value for all 12 months" edge-case handling
+now applies to the FIRST year (which has no preceding year to interpolate
+from) instead of the last (which, under the corrected labelling, has no
+such issue: Eq. A.6 only ever needs year \eqn{k-1} to compute year
+\eqn{k}'s months, so the last year is computed normally).
 }

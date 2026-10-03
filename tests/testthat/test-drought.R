@@ -100,6 +100,13 @@ test_that("max_consecutive_dry_days agrege d'abord en donnees journalieres avant
 
 test_that("drought_interpolate interpole lineairement entre annees successives", {
   # 1 cellule, 2 annees : CDD(2001) = 10, CDD(2002) = 22
+  #
+  # BUG FIX (voir NEWS) : ce test verrouillait auparavant un decalage d'un
+  # an (decembre 2001 "rejoignait" la valeur de 2002, et c'etait 2002 -- la
+  # DERNIERE annee -- qui repetait sa valeur sur 12 mois). Conforme a
+  # Eq. (A.6), decembre de l'annee k doit valoir EXACTEMENT CDD(k) (son
+  # propre point d'ancrage annuel) ; c'est donc la PREMIERE annee (2001),
+  # qui n'a pas d'annee precedente pour interpoler, qui repete sa valeur.
   cdd_annual <- list(
     data = array(c(10, 22), dim = c(1, 1, 2)),
     time = as.POSIXct(c("2001-12-31", "2002-12-31"), tz = "UTC"),
@@ -114,13 +121,13 @@ test_that("drought_interpolate interpole lineairement entre annees successives",
   expect_equal(as.Date(out$time)[13], as.Date("2002-01-01"))
   expect_equal(as.Date(out$time)[24], as.Date("2002-12-01"))
 
-  # CDD_m = (12-m)/12 * 10 + m/12 * 22, pour l'annee 2001
-  expect_equal(out$data[1, 1, 1],  11/12 * 10 + 1/12  * 22)  # janvier
-  expect_equal(out$data[1, 1, 6],  6/12  * 10 + 6/12  * 22)  # juin : moyenne simple
-  expect_equal(out$data[1, 1, 12], 0/12  * 10 + 12/12 * 22)  # decembre : rejoint l'annee 2002
+  # Premiere annee (2001) : pas d'annee precedente -> valeur repetee sur les 12 mois
+  expect_true(all(out$data[1, 1, 1:12] == 10))
 
-  # Derniere annee (2002) : valeur repetee sur les 12 mois
-  expect_true(all(out$data[1, 1, 13:24] == 22))
+  # CDD_m = (12-m)/12 * CDD(2001) + m/12 * CDD(2002), pour l'annee 2002
+  expect_equal(out$data[1, 1, 13], 11/12 * 10 + 1/12  * 22)  # janvier 2002
+  expect_equal(out$data[1, 1, 18], 6/12  * 10 + 6/12  * 22)  # juin 2002 : moyenne simple
+  expect_equal(out$data[1, 1, 24], 0/12  * 10 + 12/12 * 22)  # decembre 2002 = CDD(2002) exactement
 })
 
 test_that("drought_interpolate avec une seule annee repete simplement sa valeur sur 12 mois", {
@@ -158,7 +165,7 @@ test_that("drought_component(area = TRUE) est cohérent avec l'enchaînement man
   lon <- c(0, 1); lat <- c(0, 1)
   origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
   time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
-                   as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
+                  as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
 
   tp_path <- tempfile(fileext = ".nc")
   .build_drought_tp_netcdf(tp_path, lon, lat, time_vec, origin)
@@ -166,7 +173,7 @@ test_that("drought_component(area = TRUE) est cohérent avec l'enchaînement man
   reference_period <- c("2001-01-01", "2002-12-31")
 
   res <- drought_component(tp_path, "XX", reference_period,
-                            study_period = reference_period, area = TRUE)
+                           study_period = reference_period, area = TRUE)
 
   # Reproduction manuelle du pipeline interne
   ds          <- load_component(tp_path, "tp", NULL)
@@ -183,7 +190,7 @@ test_that("drought_component : save = TRUE puis computed_components = TRUE redon
   lon <- c(0, 1); lat <- c(0, 1)
   origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
   time_vec <- seq(as.POSIXct("2001-01-01 00:00", tz = "UTC"),
-                   as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
+                  as.POSIXct("2002-12-31 23:00", tz = "UTC"), by = "hour")
 
   tp_path <- tempfile(fileext = ".nc")
   .build_drought_tp_netcdf(tp_path, lon, lat, time_vec, origin)
@@ -194,13 +201,13 @@ test_that("drought_component : save = TRUE puis computed_components = TRUE redon
   study_period      <- reference_period  # tag de cache "drought_2001_2002_2002.rds"
 
   res_fresh <- drought_component(tp_path, "XX", reference_period, study_period,
-                                  area = FALSE, save = TRUE, save_dir = cache_dir)
+                                 area = FALSE, save = TRUE, save_dir = cache_dir)
 
   expect_true(file.exists(file.path(cache_dir, "drought_2001_2002_2002.rds")))
 
   res_cached <- drought_component(tp_path, "XX", reference_period, study_period,
-                                   area = FALSE, computed_components = TRUE,
-                                   load_dir = cache_dir)
+                                  area = FALSE, computed_components = TRUE,
+                                  load_dir = cache_dir)
 
   expect_equal(res_cached, res_fresh)
 })
@@ -208,10 +215,10 @@ test_that("drought_component : save = TRUE puis computed_components = TRUE redon
 test_that("drought_component échoue explicitement si computed_components = TRUE sans cache disponible", {
   expect_error(
     drought_component("unused.nc", "XX",
-                       reference_period = c("2001-01-01", "2002-12-31"),
-                       study_period     = c("2001-01-01", "2002-12-31"),
-                       computed_components = TRUE,
-                       load_dir = tempfile()),
+                      reference_period = c("2001-01-01", "2002-12-31"),
+                      study_period     = c("2001-01-01", "2002-12-31"),
+                      computed_components = TRUE,
+                      load_dir = tempfile()),
     "Cached file not found"
   )
 })

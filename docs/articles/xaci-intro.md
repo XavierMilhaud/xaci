@@ -1,0 +1,245 @@
+# Get Started with xaci
+
+## What is the Actuarial Climate Index?
+
+The **Actuarial Climate Index (ACI)** is a standardised measure of the
+frequency and severity of extreme climate events, originally developed
+by the American Academy of Actuaries and adapted here for France/Europe
+following Garrido, Milhaud & Olympio (2026). It combines six components,
+each expressed as a standardised anomaly relative to a reference period:
+
+``` math
+ACI = \frac{T_{90} - T_{10} + P + D + \alpha \cdot SL + W}{5 + \alpha}
+```
+
+| Symbol     | Component                                    |
+|------------|----------------------------------------------|
+| $`T_{90}`$ | Frequency of hot days (90th percentile)      |
+| $`T_{10}`$ | Frequency of cold nights (10th percentile)   |
+| $`P`$      | Maximum sliding precipitation (5-day window) |
+| $`D`$      | Consecutive dry days (CDD)                   |
+| $`SL`$     | Standardised sea level                       |
+| $`W`$      | Wind power above the 90th percentile         |
+| $`\alpha`$ | Coastal fraction (national default $`1/5`$)  |
+
+**xaci** computes each of these components from gridded ERA5 climate
+data (temperature, precipitation, wind) and from PSMSL tide-gauge
+records (sea level), and aggregates them into the index above at
+whatever temporal granularity (monthly, seasonal, semester, annual) and
+spatial level (national, administrative unit, or grid cell) you need.
+
+``` r
+
+library(xaci)
+```
+
+## The four-step workflow
+
+Because ERA5 data can be large (hourly, multi-decade, whole-country),
+xaci splits the work into four steps. Steps 1-3 are one-off, heavy
+computations; step 4 is the fast, repeatable step used for day-to-day
+exploration.
+
+    Step 1 (long)   Step 2 (short)   Step 3 (long)              Step 4 (fast, repeatable)
+    ERA5 download → Country mask  → Grid-cell components     →  ACI / components at any
+    (cache dir)      (cache dir)     (cache dir, .rds)           temporal & spatial level
+
+- **Step 1** downloads the four required ERA5 variables (`t2m`, `tp`,
+  `u10`, `v10`) via
+  [`download_era5_all()`](../reference/download_era5_all.md) /
+  [`download_era5()`](../reference/download_era5.md) (requires a free
+  Copernicus CDS account and the `ecmwfr` package).
+- **Step 2** downloads a land/sea country mask with
+  [`download_mask()`](../reference/download_mask.md).
+- **Step 3** computes each component at grid-cell / monthly resolution
+  and caches it to disk (`save = TRUE`) — this is the expensive step,
+  done once per country and reference period.
+- **Step 4** reloads the cached components
+  (`computed_components = TRUE`) and re-aggregates them on the fly to
+  any granularity or spatial level you ask for — this is the step you
+  repeat while exploring the data.
+
+[`calculate_aci()`](../reference/calculate_aci.md) runs the whole
+pipeline (steps 3-4 combined, or step 4 alone if
+`computed_components = TRUE`); each component can also be computed
+individually with
+[`temperature_component()`](../reference/temperature_component.md),
+[`precipitation_component()`](../reference/precipitation_component.md),
+[`drought_component()`](../reference/drought_component.md),
+[`wind_component()`](../reference/wind_component.md) and
+[`sealevel_component()`](../reference/sealevel_component.md). This is
+covered in detail in
+[`vignette("xaci-components")`](../articles/xaci-components.md).
+
+### Where things get cached
+
+Steps 1-3 all write to disk, via a `dest_dir` (download functions) or
+`save_dir` (component functions) argument. In every case, this argument
+defaults to `NULL`, which resolves to a sub-directory of
+[`tempdir()`](https://rdrr.io/r/base/tempfile.html) — safe, zero-config,
+and cleared automatically at the end of the R session, in line with CRAN
+policy (packages must not write to the user’s home filespace by
+default).
+
+Since the whole point of steps 1-3 is to avoid repeating long
+computations, you will usually want a directory that **persists** across
+sessions instead. Pass your own path explicitly;
+`tools::R_user_dir("xaci", which = "data")` is a convenient, per-user
+location that works well for this (it is what `xaci` itself uses
+internally to cache administrative boundaries). Because step 1 requires
+network access and a personal CDS token, it cannot be demonstrated
+inside a vignette; here is the shape of the call you would use with your
+own data:
+
+``` r
+
+library(ecmwfr)
+cds_set_key("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+data_dir <- tools::R_user_dir("xaci", which = "data")
+
+download_era5_all(
+  years          = 2010:2020,
+  area           = c(51.5, -5.5, 41.0, 10.0),   # N, W, S, E (metropolitan France)
+  country_abbrev = "FRA",
+  dest_dir       = data_dir
+)
+
+download_mask(
+  country_abbrev = "FRA",
+  area           = c(51.5, -5.5, 41.0, 10.0),
+  dest_dir       = data_dir
+)
+```
+
+## A minimal worked example
+
+The rest of this vignette (and the ones that follow) instead work on a
+tiny, self-contained **synthetic** dataset built in a few lines of R, so
+that the code below runs anywhere, with no downloads and no CDS account.
+The synthetic data mimics the structure of a real ERA5 extract: an
+hourly NetCDF file with `longitude` / `latitude` / `time` dimensions,
+plus a `country` land-mask NetCDF, exactly what
+[`temperature_component()`](../reference/temperature_component.md) and
+friends expect.
+
+``` r
+
+build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+  set.seed(1)
+  seasonal <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365))  # ~15C in Kelvin
+  warming  <- 0.6 * seq_len(nt) / nt   # a mild warming trend across the series
+  vals <- array(NA_real_, dim = c(nlo, nla, nt))
+  for (i in seq_len(nlo)) {
+    for (j in seq_len(nla)) {
+      vals[i, j, ] <- seasonal + warming + (i + j) + rnorm(nt, sd = 1.5)
+    }
+  }
+
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  var_t2m <- ncdf4::ncvar_def("t2m", "K", list(dim_lon, dim_lat, dim_time),
+                              missval = NA, prec = "double")
+
+  nc <- ncdf4::nc_create(path, list(var_t2m))
+  ncdf4::ncvar_put(nc, var_t2m, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+build_synthetic_mask <- function(path, lon, lat) {
+  dim_lon <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  var_mask <- ncdf4::ncvar_def("country", "1", list(dim_lon, dim_lat),
+                               missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_mask))
+  # All cells fully "inside" the (fictitious) country for this example
+  ncdf4::ncvar_put(nc, var_mask, matrix(1, length(lon), length(lat)))
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+```
+
+We build four years of hourly data on a tiny 2x2 grid:
+
+``` r
+
+lon      <- c(-1, 0)
+lat      <- c(43, 44)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
+
+t2m_file  <- tempfile(fileext = ".nc")
+mask_file <- tempfile(fileext = ".nc")
+
+build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
+build_synthetic_mask(mask_file, lon, lat)
+```
+
+…and compute the T90 component (frequency of hot days), standardised
+against 2011 as a **reference** period, over the full two years as the
+**study** period. This distinction matters: if `study_period` were set
+equal to `reference_period` here (a single year), every month would have
+exactly one observation to compare against itself, and the standardised
+anomaly would be identically zero for every month, by construction — not
+a bug, just a degenerate case worth being aware of when experimenting
+with short, synthetic examples like this one.
+
+``` r
+
+reference_period <- c("2011-01-01", "2013-12-31")
+study_period      <- c("2011-01-01", "2014-12-31")
+
+t90 <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev         = "XXX",
+  reference_period       = reference_period,
+  study_period            = study_period,
+  mask_path               = mask_file,
+  percentile              = 90,
+  extremum                = "max",
+  above_thresholds        = TRUE,
+  area                    = TRUE     # national (spatially averaged) series
+)
+
+head(t90, 14)
+#> 2011-01-01 2011-02-01 2011-03-01 2011-04-01 2011-05-01 2011-06-01 2011-07-01 2011-08-01 2011-09-01 2011-10-01 
+#> -0.8867964 -0.6175917 -0.9532076 -1.1031405 -0.4402255 -1.0000000 -1.0154893 -0.9072647 -0.2182179 -1.0816841 
+#> 2011-11-01 2011-12-01 2012-01-01 2012-02-01 
+#> -0.8663254 -0.6305539 -0.1970659 -0.5361511
+```
+
+Note that every 2011 month is exactly `0`: that year *is* the reference
+period, so each of its months is being compared to itself, by
+construction. 2012’s months show real anomalies instead, since the mild
+warming trend built into the synthetic data (see the code above) makes
+2012 run warmer than the 2011 baseline.
+
+`t90` is a named numeric vector: one standardised value per month,
+positive values indicating months with more hot days than the reference
+average, negative values fewer. This is exactly the kind of object that
+feeds into [`calculate_aci()`](../reference/calculate_aci.md). The next
+vignettes build on this same synthetic-data pattern to cover:
+
+- [`vignette("xaci-components")`](../articles/xaci-components.md) —
+  computing all six components individually, including the sea-level
+  component from PSMSL station data.
+- [`vignette("xaci-full-pipeline")`](../articles/xaci-full-pipeline.md)
+  — running [`calculate_aci()`](../reference/calculate_aci.md) end to
+  end and interpreting its output.
+- [`vignette("xaci-visualization")`](../articles/xaci-visualization.md)
+  — plotting time series, component breakdowns, distributions and maps.
+- [`vignette("xaci-terra-engine")`](../articles/xaci-terra-engine.md) —
+  the memory-safe `engine = "terra"` option for whole-country,
+  multi-decade, hourly historical periods.
+- [`vignette("xaci-admin-levels")`](../articles/xaci-admin-levels.md) —
+  aggregating results at the administrative unit level (e.g. French
+  departments) instead of nationally.

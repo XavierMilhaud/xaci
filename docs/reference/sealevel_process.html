@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">xaci</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -71,15 +71,53 @@
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A named list with:</p><dl><dt><code>data</code></dt>
 <dd><p>Standardised <code>data.frame</code> of anomalies
-      <code>[time x stations]</code>, row names <code>"YYYY-MM-DD"</code>.</p></dd>
+      <code>[time x stations]</code>, row names <code>"YYYY-MM-DD"</code>. Stations
+      listed in <code>excluded_stations</code> are entirely absent from this
+      data.frame (all-<code>NA</code> columns are dropped), not merely NA.</p></dd>
 
     <dt><code>coords</code></dt>
 <dd><p>A <code>data.frame</code> with columns
       <code>station_id</code>, <code>lon</code>, <code>lat</code>, one row per station
-      present in <code>data</code>.</p></dd>
+      present in <code>data</code> (excluded stations are also dropped here).</p></dd>
+
+    <dt><code>excluded_stations</code></dt>
+<dd><p>Character vector of station column
+      names (possibly empty) that have ZERO observations in
+      <code>reference_period</code> for at least one calendar month, and are
+      therefore impossible to standardise against Eq. A.12 (no reference
+      mean is definable for that station/month) – see the "Bug fix"
+      note below. Use this to know which stations (e.g. ones installed
+      after 1990) silently contribute nothing, so this isn't found out
+      by surprise downstream.</p></dd>
 
 
 </dl></div>
+    <div class="section level2">
+    <h2 id="bug-fix-see-news-">Bug fix (see NEWS)<a class="anchor" aria-label="anchor" href="#bug-fix-see-news-"></a></h2>
+
+
+<p>Stations with literally no data during <code>reference_period</code> (e.g. a
+tide gauge installed in 2018, for a 1961-1990 reference period) used to
+get a reference mean of <code>NaN</code> (not <code>NA</code>), which propagated
+through <code><a href="sealevel_standardize_data.html">sealevel_standardize_data()</a></code> to make <strong>the entire
+standardised series of that station <code>NaN</code></strong> – including during
+years where the station DOES have perfectly good data. This had no
+visible effect only because <code><a href="reduce_sealevel_over_region.html">reduce_sealevel_over_region()</a></code>'s
+<code>rowMeans(..., na.rm = TRUE)</code> happens to also drop <code>NaN</code>
+(R treats <code>NaN</code> as a kind of <code>NA</code>), so the station was
+silently and permanently excluded from every national/regional average
+it could have contributed to, with no warning. For the French stations
+listed in Garrido et al.'s Table B.2, 12 of the 40 stations (30%) have
+zero overlap with 1961-1990 and were affected. This function now (a)
+produces clean <code>NA</code> instead of <code>NaN</code> for this case, and more
+importantly (b) explicitly detects and reports these stations via
+<code><a href="https://rdrr.io/r/base/warning.html" class="external-link">warning()</a></code> and the <code>excluded_stations</code> return value, instead
+of relying on an implicit, easy-to-miss floating-point coincidence.
+Excluding such stations is not itself a choice this function makes –
+there is no principled reference baseline to compute for a station that
+did not exist during the reference period – but that exclusion is now
+visible rather than silent.</p>
+    </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
@@ -90,7 +128,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

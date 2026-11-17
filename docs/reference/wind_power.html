@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">xaci</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,6 +73,23 @@ If provided, only the reference sub-period is returned.</p></dd>
     <p>A list with <code>data</code> [lon x lat x days] (wind power in W/m²)
   and daily <code>time</code>.</p>
     </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p><strong>Bug fix (see NEWS):</strong> earlier versions averaged <code>u10</code> and
+<code>v10</code> to daily means SEPARATELY first, then took the magnitude of
+that daily-mean vector (<code>sqrt(mean(u)^2 + mean(v)^2)</code>) as the "daily
+mean wind speed". This "vector averaging" systematically UNDER-estimates
+the true daily mean wind speed whenever wind direction varies over the
+day, because opposing (or merely differing) hourly components partially
+cancel out before the magnitude is taken – e.g. a wind blowing at a
+constant 8 m/s whose direction oscillates by only +/-60 degrees over the
+day averages out to a vector magnitude of ~6 m/s, a ~58% error on the
+resulting wind power (0.5*rho*w^3), verified numerically. The standard
+meteorological convention for a "daily mean wind speed" is instead to
+average the INSTANTANEOUS scalar speed <code>sqrt(u^2+v^2)</code> computed at
+each timestep, which is always positive and does not suffer from this
+cancellation; that is what this function now does.</p>
+    </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
@@ -83,7 +100,7 @@ If provided, only the reference sub-period is returned.</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

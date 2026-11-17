@@ -137,8 +137,9 @@ download_era5 <- function(variable       = c("t2m", "tp", "u10", "v10"),
 
     message(sprintf("  Downloading %s for year %d ...", variable, yr))
 
+    # request at 0.25°lat x 0.25° lon (grid cell)
     request <- list(
-      dataset_short_name = "reanalysis-era5-single-levels",
+      dataset_short_name = "reanalysis-era5-single-levels", # use "reanalysis-era5-land" for 0.1°x0.1°
       product_type       = "reanalysis",
       variable           = cds_var,
       year               = as.character(yr),
@@ -289,7 +290,7 @@ download_mask <- function(country_abbrev = "FRA",
 
   # Download one arbitrary hour of the land-sea mask variable
   request <- list(
-    dataset_short_name = "reanalysis-era5-single-levels",
+    dataset_short_name = "reanalysis-era5-single-levels", # use "reanalysis-era5-land" for 0.1°x0.1°
     product_type       = "reanalysis",
     variable           = "land_sea_mask",
     year               = "1990",

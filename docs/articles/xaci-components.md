@@ -1,0 +1,406 @@
+# Computing the Six ACI Components
+
+``` r
+
+library(xaci)
+```
+
+Each of the six ACI components can be computed independently of
+[`calculate_aci()`](../reference/calculate_aci.md) — useful to inspect a
+single component, to recompute one after a data update, or simply to
+understand what each function does before combining them. This vignette
+walks through all of them on a small synthetic dataset built with the
+same pattern as [`vignette("xaci-intro")`](../articles/xaci-intro.md).
+
+## Building a synthetic ERA5-like extract
+
+We generate four years of hourly data (`t2m`, `tp`, `u10`, `v10`) on a
+tiny 3x3 grid, plus a land-mask NetCDF, entirely in memory / temp files
+— no network access required. We use the first three years (2011-2013)
+as the **reference period** and all four years (2011-2014) as the
+**study period**: this matters for what the standardised output looks
+like, see the note right after the data are generated below.
+
+``` r
+
+build_synthetic_nc <- function(path, var, unit, lon, lat, time_vec, origin, vals) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  ncvar <- ncdf4::ncvar_def(var, unit, list(dim_lon, dim_lat, dim_time),
+                            missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(ncvar))
+  ncdf4::ncvar_put(nc, ncvar, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+build_synthetic_mask <- function(path, lon, lat) {
+  dim_lon <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  var_mask <- ncdf4::ncvar_def("country", "1", list(dim_lon, dim_lat),
+                               missval = NA, prec = "double")
+  nc <- ncdf4::nc_create(path, list(var_mask))
+  ncdf4::ncvar_put(nc, var_mask, matrix(1, length(lon), length(lat)))
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+set.seed(42)
+lon      <- c(-1, 0, 1)
+lat      <- c(43, 44, 45)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
+nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+# A mild warming/drying trend across the series, so that 2014 (the one
+# out-of-reference year) shows genuine anomalies rather than pure noise.
+trend <- seq_len(nt) / nt
+
+# --- t2m: seasonal cycle in Kelvin, plus warming trend ---
+seasonal_t <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
+t2m_vals <- array(NA_real_, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla))
+  t2m_vals[i, j, ] <- seasonal_t + (i + j) + rnorm(nt, sd = 1.5)
+
+# --- tp: precipitation (m/hour), mostly dry with occasional rain events,
+# with rain becoming rarer over time (drying trend) ---
+tp_vals <- array(0, c(nlo, nla, nt))
+for (i in seq_len(nlo)) for (j in seq_len(nla)) {
+  rain_hours <- rbinom(nt, 1, 0.08 * (1 - 0.3 * trend))
+  tp_vals[i, j, ] <- rain_hours * rexp(nt, rate = 800)
+}
+
+# --- u10 / v10: wind components (m/s) ---
+u10_vals <- array(rnorm(nlo * nla * nt, mean = 3, sd = 4), c(nlo, nla, nt))
+v10_vals <- array(rnorm(nlo * nla * nt, mean = 1, sd = 4), c(nlo, nla, nt))
+
+t2m_file  <- tempfile(fileext = ".nc")
+tp_file   <- tempfile(fileext = ".nc")
+u10_file  <- tempfile(fileext = ".nc")
+v10_file  <- tempfile(fileext = ".nc")
+mask_file <- tempfile(fileext = ".nc")
+
+build_synthetic_nc(t2m_file, "t2m", "K",     lon, lat, time_vec, origin, t2m_vals)
+build_synthetic_nc(tp_file,  "tp",  "m",     lon, lat, time_vec, origin, tp_vals)
+build_synthetic_nc(u10_file, "u10", "m s-1", lon, lat, time_vec, origin, u10_vals)
+build_synthetic_nc(v10_file, "v10", "m s-1", lon, lat, time_vec, origin, v10_vals)
+build_synthetic_mask(mask_file, lon, lat)
+
+reference_period <- c("2011-01-01", "2013-12-31")  # 3 years
+study_period      <- c("2011-01-01", "2014-12-31")  # 4 years
+country_abbrev    <- "XXX"   # fictitious code for this synthetic example
+```
+
+Three things worth knowing before reading the output below, all
+consequences of using a small, synthetic reference period rather than
+the multi-decade history you’d have with real data:
+
+- **`reference_period` must span at least 2 years.** Standardisation
+  divides by a reference-period standard deviation computed separately
+  for each calendar month; with only 1 year, every month has exactly 1
+  reference sample, an undefined (`NA`) standard deviation, and (for the
+  sea-level component specifically) an empty result.
+- **A handful of reference years makes every component look artificially
+  alike.** Standardising *n* reference observations against their own
+  mean/sd always satisfies two constraints: they sum to 0, and their
+  squares sum to *n* - 1. That leaves only *n* - 2 “degrees of freedom”
+  for the actual data to express itself through. With `n = 2` there are
+  **zero** degrees of freedom left: every month’s anomaly is forced to
+  exactly `+1/sqrt(2)` or `-1/sqrt(2)` (≈ ±0.71), for *every* component,
+  regardless of what the underlying data actually looked like — which is
+  why, with a 2-year reference, temperature, precipitation, drought and
+  wind all “look the same” during the reference period: they’re not
+  similar, they’re mathematically forced into the same shape. The
+  reference period here spans 3 years (1 degree of freedom per month)
+  rather than 2 or 5+: enough to break that exact-magnitude artifact and
+  let each component’s standardised values differ from one another,
+  while keeping this vignette quick to build. It’s a deliberate
+  compromise for build speed, not a fully realistic reference sample —
+  with real, multi-decade data this is a non-issue either way.
+- Months in `study_period` but *outside* `reference_period` (2014 here)
+  aren’t constrained this way at all and show unambiguously genuine
+  anomalies, driven by the warming/drying trend built into the synthetic
+  data.
+
+## Temperature: `temperature_component()`
+
+Both the hot-day frequency ($`T_{90}`$) and the cold-night frequency
+($`T_{10}`$) come from the same function, called twice with different
+`percentile` / `extremum` / `above_thresholds` arguments:
+
+``` r
+
+t90 <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev         = country_abbrev,
+  reference_period        = reference_period,
+  study_period            = study_period,
+  mask_path               = mask_file,
+  percentile              = 90, extremum = "max", above_thresholds = TRUE,
+  area                    = TRUE
+)
+
+t10 <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev         = country_abbrev,
+  reference_period        = reference_period,
+  study_period            = study_period,
+  mask_path               = mask_file,
+  percentile              = 10, extremum = "min", above_thresholds = FALSE,
+  area                    = TRUE
+)
+
+head(t90, 3)   # inside reference_period (2011-2013): reflects the data
+#> 2011-01-01 2011-02-01 2011-03-01 
+#> -0.9149914 -0.9743106 -0.8320503
+tail(t90, 3)   # 2014, outside reference_period: genuine anomalies
+#> 2014-10-01 2014-11-01 2014-12-01 
+#>   2.044340   1.236330   1.585021
+head(t10, 3)
+#> 2011-01-01 2011-02-01 2011-03-01 
+#>  0.8992058  0.9424617  0.9635368
+tail(t10, 3)
+#> 2014-10-01 2014-11-01 2014-12-01 
+#>  -1.999621  -1.826386  -1.225086
+```
+
+Internally,
+[`temperature_component()`](../reference/temperature_component.md)
+averages a “day” half and a “night” half of each day, computes the
+reference-period threshold at the requested percentile, then counts
+(monthly) how often each day/night crosses it.
+
+## Precipitation: `precipitation_component()`
+
+The precipitation component is the maximum 5-day sliding sum of
+precipitation, standardised against the reference period:
+
+``` r
+
+prec <- precipitation_component(
+  precipitation_data_path = tp_file,
+  country_abbrev           = country_abbrev,
+  reference_period          = reference_period,
+  study_period              = study_period,
+  mask_path                 = mask_file,
+  var_name                  = "tp",
+  window_size                = 5L,
+  area                       = TRUE
+)
+
+head(prec, 3)
+#> 2011-01-01 2011-02-01 2011-03-01 
+#>  1.1428345  0.9358717  1.1215291
+tail(prec, 3)
+#> 2014-10-01 2014-11-01 2014-12-01 
+#>  -2.496143  -1.857892  -1.149866
+```
+
+## Drought: `drought_component()`
+
+The drought component is based on the maximum number of **consecutive
+dry days (CDD)** per year, interpolated to monthly resolution and
+standardised:
+
+``` r
+
+drought <- drought_component(
+  precipitation_data_path = tp_file,
+  country_abbrev           = country_abbrev,
+  reference_period          = reference_period,
+  study_period              = study_period,
+  mask_path                 = mask_file,
+  area                       = TRUE
+)
+
+head(drought, 3)
+#> 2011-01-01 2011-02-01 2011-03-01 
+#> -0.9506522 -1.0762085 -1.1529024
+tail(drought, 3)
+#> 2014-10-01 2014-11-01 2014-12-01 
+#>   1.529558   1.279779   1.080634
+```
+
+## Wind: `wind_component()`
+
+The wind component measures how often wind power (derived from the `u10`
+and `v10` components) exceeds its reference-period 90th percentile:
+
+``` r
+
+wind <- wind_component(
+  wind_u10_data_path = u10_file,
+  wind_v10_data_path = v10_file,
+  country_abbrev       = country_abbrev,
+  reference_period      = reference_period,
+  study_period          = study_period,
+  mask_path             = mask_file,
+  area                  = TRUE
+)
+
+head(wind, 3)
+#> 2011-01-01 2011-02-01 2011-03-01 
+#>          0          0          0
+tail(wind, 3)
+#> 2014-10-01 2014-11-01 2014-12-01 
+#>  0.1971326  0.2370370  0.2365591
+```
+
+## Sea level: `sealevel_component()`
+
+Unlike the other components, sea level comes from **PSMSL tide-gauge
+records**, not gridded NetCDF data. xaci bundles the PSMSL station
+metadata (names, coordinates, country) in `inst/extdata/psmsl_data.csv`,
+but not the tide-gauge measurement history itself (downloaded on demand
+by [`request_sealevel_data()`](../reference/request_sealevel_data.md),
+which requires network access).
+
+To keep this vignette self-contained, we generate synthetic monthly
+measurements for two real French stations (Brest and Marseille, PSMSL
+IDs 1 and 61) in the format
+[`sealevel_load_data()`](../reference/sealevel_load_data.md) expects,
+instead of downloading real records.
+
+See the note above on why `reference_period` spans 2 full years here
+rather than 1: with a single reference year, sea-level standardisation
+would divide by an undefined (`NA`) per-month standard deviation, and —
+after that `NA` propagates through every standardised value — return an
+empty result.
+
+``` r
+
+psmsl_meta <- load_psmsl_data()
+brest     <- psmsl_meta[psmsl_meta$ID == 1, ]
+marseille <- psmsl_meta[psmsl_meta$ID == 61, ]
+brest[, c("Station Name", "ID", "lat", "lon", "Country")]
+#> # A tibble: 1 × 5
+#>   `Station Name`    ID   lat   lon Country
+#>   <chr>          <dbl> <dbl> <dbl> <chr>  
+#> 1 BREST              1  48.4 -4.50 FRA
+marseille[, c("Station Name", "ID", "lat", "lon", "Country")]
+#> # A tibble: 1 × 5
+#>   `Station Name`    ID   lat   lon Country
+#>   <chr>          <dbl> <dbl> <dbl> <chr>  
+#> 1 MARSEILLE         61  43.3  5.35 FRA
+
+# PSMSL encodes the month as a year fraction (see ?sealevel_correct_date_format)
+month_frac <- c("0417", "125", "2083", "2917", "375", "4583",
+                "5417", "625", "7083", "7917", "875", "9583")
+
+build_synthetic_psmsl_station <- function(dir, station_id, years,
+                                          base_level, trend_mm_per_year) {
+  lines <- character(0)
+  for (y in years) {
+    for (m in seq_len(12)) {
+      level <- base_level + trend_mm_per_year * (y - years[1]) + rnorm(1, sd = 15)
+      lines <- c(lines, sprintf("%d.%s;%.1f;0;000", y, month_frac[m], level))
+    }
+  }
+  writeLines(lines, file.path(dir, paste0(station_id, ".txt")))
+}
+
+psmsl_dir <- tempfile("psmsl_")
+dir.create(psmsl_dir)
+set.seed(123)
+build_synthetic_psmsl_station(psmsl_dir, 1,  2011:2014, base_level = 7020, trend_mm_per_year = 3)
+build_synthetic_psmsl_station(psmsl_dir, 61, 2011:2014, base_level = 6980, trend_mm_per_year = 4)
+
+sealevel_national <- sealevel_component(
+  country_abbrev    = "FRA",     # must match the metadata's Country column
+  study_period       = study_period,
+  reference_period   = reference_period,
+  area                = TRUE,
+  sealevel_dir        = psmsl_dir
+)
+
+head(sealevel_national, 3)   # inside reference_period (2011-2013)
+#>              sealevel
+#> 2011-01-01 -1.1529915
+#> 2011-02-01  0.3086872
+#> 2011-03-01  0.8661490
+tail(sealevel_national, 3)   # 2014, outside reference_period: genuine anomalies
+#>               sealevel
+#> 2014-10-01 -1.55288664
+#> 2014-11-01  1.28824360
+#> 2014-12-01  0.09876605
+```
+
+[`sealevel_component()`](../reference/sealevel_component.md) also has a
+grid-cell mode (`area = FALSE`), which
+inverse-distance-weight-interpolates the station anomalies onto an ERA5
+grid — this is what [`calculate_aci()`](../reference/calculate_aci.md)
+uses internally when producing grid-cell (mapping) output:
+
+``` r
+
+sealevel_grid <- sealevel_component(
+  country_abbrev  = "FRA",
+  study_period     = study_period,
+  reference_period = reference_period,
+  area              = FALSE,
+  mask_path         = mask_file,      # supplies the target lon/lat grid
+  # Our fictitious grid (lon -1/0/1, lat 43/44/45) sits ~350-650 km from
+  # Brest and Marseille; the default max_dist_km = 500 would leave a couple
+  # of cells with no station in range (NA sea level -> NA ACI there). We
+  # widen it here purely because this toy grid's placement is arbitrary --
+  # with a real ERA5 grid this cutoff is meaningful and NA cells far from
+  # the coast are expected, see ?sealevel_component.
+  max_dist_km       = 800,
+  sealevel_dir      = psmsl_dir
+)
+
+dim(sealevel_grid$data)
+#> [1]  3  3 48
+```
+
+## Caching heavy computations (steps 3-4)
+
+With real ERA5 data, each `*_component()` call above can take a long
+time. Pass `save = TRUE` once to cache the result to disk, then
+`computed_components = TRUE` on subsequent calls to reload it instantly
+— this is exactly what
+[`calculate_aci()`](../reference/calculate_aci.md) does internally.
+
+`save_dir`/`load_dir` default to `NULL` (a sub-directory of
+[`tempdir()`](https://rdrr.io/r/base/tempfile.html), cleared at the end
+of the session); pass your own persistent directory, as below, to
+actually benefit from the cache across sessions:
+
+``` r
+
+results_dir <- tools::R_user_dir("xaci", which = "data")
+
+precipitation_component(
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  country_abbrev           = "FRA",
+  reference_period          = c("2011-01-01", "2013-12-31"),
+  study_period              = c("2011-01-01", "2015-12-31"),
+  mask_path                 = "data/era5/FRA/mask_FRA.nc",
+  area                       = FALSE,
+  save                       = TRUE,
+  save_dir                   = results_dir
+)
+
+# Later, or in a different session:
+prec_national <- precipitation_component(
+  precipitation_data_path = "data/era5/FRA/tp_2011_2015.nc",
+  country_abbrev           = "FRA",
+  reference_period          = c("2011-01-01", "2013-12-31"),
+  study_period              = c("2011-01-01", "2015-12-31"),
+  mask_path                 = "data/era5/FRA/mask_FRA.nc",
+  area                       = TRUE,
+  computed_components        = TRUE,
+  load_dir                   = results_dir
+)
+```
+
+The next vignette,
+[`vignette("xaci-full-pipeline")`](../articles/xaci-full-pipeline.md),
+shows how [`calculate_aci()`](../reference/calculate_aci.md) combines
+all six components above into the index itself.

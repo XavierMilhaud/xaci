@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">xaci</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -58,7 +58,8 @@
 <span>  mask_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  threshold <span class="op">=</span> <span class="fl">0.8</span>,</span>
 <span>  cores <span class="op">=</span> <span class="fl">1L</span>,</span>
-<span>  target_chunk_gb <span class="op">=</span> <span class="fl">1</span></span>
+<span>  target_chunk_gb <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  window_days <span class="op">=</span> <span class="fl">5L</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -114,6 +115,12 @@ step is by far the most expensive part of this function. Default
 <code><a href="resample_daily_terra.html">resample_daily_terra()</a></code> (see its memory note) for memory-safe
 temporal chunking of large hourly series.</p></dd>
 
+
+<dt id="arg-window-days">window_days<a class="anchor" aria-label="anchor" href="#arg-window-days"></a></dt>
+<dd><p>Passed to <code><a href="calculate_percentiles_terra.html">calculate_percentiles_terra()</a></code>: width,
+in days, of the rolling window used to compute the percentile
+threshold. Default <code>5L</code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -130,7 +137,7 @@ temporal chunking of large hourly series.</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

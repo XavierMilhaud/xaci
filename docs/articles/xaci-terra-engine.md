@@ -1,0 +1,222 @@
+# Memory-Safe Processing with the terra Engine
+
+``` r
+
+library(xaci)
+```
+
+## Why a second engine?
+
+The default pipeline
+([`temperature_component()`](../reference/temperature_component.md),
+[`wind_component()`](../reference/wind_component.md),
+[`drought_component()`](../reference/drought_component.md),
+[`precipitation_component()`](../reference/precipitation_component.md),
+all built on [`load_component()`](../reference/load_component.md) /
+`ncdf4`) reads the **entire** hourly NetCDF cube into memory before
+doing any computation. For a single ERA5 variable over a whole country,
+multiple decades, at hourly resolution, this can require tens of
+gigabytes of RAM before any actual work happens.
+
+xaci provides a memory-safe alternative built on the
+[`terra`](https://rspatial.github.io/terra/) package: it reads NetCDF
+files lazily (metadata only, no pixel values loaded up front), reduces
+hourly data to daily resolution block by block, and writes intermediate
+results to disk rather than accumulating them in RAM. Once reduced to
+daily resolution — a few hundred KB to a few MB even for 40+ years of
+data — the rest of the pipeline (percentile thresholds, monthly
+aggregation, standardisation) is identical to the default engine: same
+functions, same results. This is verified in the package’s own test
+suite by a parity test comparing both engines on synthetic and
+NetCDF-backed data.
+
+**Rule of thumb**: use `engine = "base"` (the default) for
+country-level, multi-year studies; switch to `engine = "terra"` when the
+default pipeline runs out of memory, typically a whole-country, hourly,
+multi-decade `study_period`.
+
+## Same inputs, same outputs
+
+Each memory-safe component has a `_terra`-suffixed, drop-in equivalent,
+used exactly like its base-R counterpart (same arguments — plus `cores`,
+used only by the temperature percentile step, see below):
+
+| Base-R function | `terra` equivalent |
+|----|----|
+| [`temperature_component()`](../reference/temperature_component.md) | [`temperature_component_terra()`](../reference/temperature_component_terra.md) |
+| [`wind_component()`](../reference/wind_component.md) | [`wind_component_terra()`](../reference/wind_component_terra.md) |
+| [`drought_component()`](../reference/drought_component.md) | [`drought_component_terra()`](../reference/drought_component_terra.md) |
+| [`precipitation_component()`](../reference/precipitation_component.md) | [`precipitation_component_terra()`](../reference/precipitation_component_terra.md) |
+
+[`sealevel_component()`](../reference/sealevel_component.md) has no
+`_terra` equivalent: its input is tide-gauge CSV data, not gridded
+NetCDF, so the memory bottleneck this engine addresses does not apply to
+it.
+
+We build the same kind of tiny synthetic NetCDF used elsewhere in this
+package’s vignettes, and compute
+[`temperature_component()`](../reference/temperature_component.md) both
+ways to show they agree. As in the other vignettes, `reference_period`
+spans 3 years and `study_period` extends a year beyond it, with a mild
+warming trend added to the synthetic data — see
+[`vignette("xaci-components")`](../articles/xaci-components.md) for why
+a short reference period is best avoided: with 1 year, an undefined
+per-month standard deviation; with exactly 2, standardising always
+collapses to exactly `+1/sqrt(2)` or `-1/sqrt(2)` (a mathematical
+identity, not a data-dependent result) — informative for neither engine,
+and not a meaningful check of whether they actually agree on the
+underlying arithmetic. 3 reference years leave 1 “degree of freedom” per
+month (see
+[`vignette("xaci-components")`](../articles/xaci-components.md) for the
+exact argument) – enough to break that shared artifact and keep this
+vignette quick to build, though not as fully realistic as a longer
+reference sample would be.
+
+This vignette’s grid (2x2 cells, 4 years of hourly data) is deliberately
+tiny so it builds quickly — it demonstrates that the `terra` engine is a
+drop-in replacement with matching output, not that it holds up at
+country scale over decades. That larger-scale, non-toy validation is
+what the package’s own test suite (`tests/testthat/test-*-terra-*.R`) is
+for, comparing both engines against synthetic *and* NetCDF-backed data
+closer to real ERA5 extracts.
+
+``` r
+
+build_synthetic_t2m <- function(path, lon, lat, time_vec, origin) {
+  time_hours <- as.numeric(difftime(time_vec, origin, units = "hours"))
+  nlo <- length(lon); nla <- length(lat); nt <- length(time_vec)
+
+  trend    <- seq_len(nt) / nt   # mild warming trend, see note above
+  seasonal <- 288 + 10 * sin(2 * pi * seq_len(nt) / (24 * 365)) + 0.6 * trend
+  vals <- array(NA_real_, dim = c(nlo, nla, nt))
+  for (i in seq_len(nlo)) {
+    for (j in seq_len(nla)) {
+      vals[i, j, ] <- seasonal + (i + j) + rnorm(nt, sd = 1.5)
+    }
+  }
+
+  dim_lon  <- ncdf4::ncdim_def("longitude", "degrees_east", lon)
+  dim_lat  <- ncdf4::ncdim_def("latitude", "degrees_north", lat)
+  dim_time <- ncdf4::ncdim_def(
+    "time", paste0("hours since ", format(origin, "%Y-%m-%d %H:%M:%S")),
+    time_hours, unlim = TRUE
+  )
+  var_t2m <- ncdf4::ncvar_def("t2m", "K", list(dim_lon, dim_lat, dim_time),
+                              missval = NA, prec = "double")
+
+  nc <- ncdf4::nc_create(path, list(var_t2m))
+  ncdf4::ncvar_put(nc, var_t2m, vals)
+  ncdf4::nc_close(nc)
+  invisible(path)
+}
+
+set.seed(99)
+lon      <- c(-1, 0)
+lat      <- c(43, 44)
+origin   <- as.POSIXct("1900-01-01 00:00:00", tz = "UTC")
+time_vec <- seq(as.POSIXct("2011-01-01 00:00", tz = "UTC"),
+                as.POSIXct("2014-12-31 23:00", tz = "UTC"), by = "hour")
+
+t2m_file <- tempfile(fileext = ".nc")
+build_synthetic_t2m(t2m_file, lon, lat, time_vec, origin)
+
+reference_period <- c("2011-01-01", "2013-12-31")  # 3 years
+study_period      <- c("2011-01-01", "2014-12-31")  # 4 years
+```
+
+``` r
+
+t90_base <- temperature_component(
+  temperature_data_path = t2m_file,
+  country_abbrev          = "XXX",
+  reference_period         = reference_period,
+  study_period             = study_period,
+  percentile               = 90, extremum = "max", above_thresholds = TRUE,
+  area                     = TRUE
+)
+
+t90_terra <- temperature_component_terra(
+  temperature_data_path = t2m_file,
+  country_abbrev          = "XXX",
+  reference_period         = reference_period,
+  study_period             = study_period,
+  percentile               = 90, extremum = "max", above_thresholds = TRUE,
+  area                     = TRUE,
+  cores                    = 1L
+)
+
+# 2011-2013 (the 3 reference years) reflect the actual data in both engines
+# (see note above); 2014 carries the genuine, trend-driven signal on top --
+# a much more informative comparison than a 2-year reference would give.
+rbind(base = round(t90_base, 4), terra = round(t90_terra, 4))
+#>       2011-01-01 2011-02-01 2011-03-01 2011-04-01 2011-05-01 2011-06-01 2011-07-01 2011-08-01 2011-09-01 2011-10-01
+#> base     -0.7338    -0.5385    -1.0653    -1.1388    -0.9073          0    -0.8154    -1.0806    -1.1488    -0.9049
+#> terra    -0.7338    -0.5385    -1.0653    -1.1388    -0.9073          0    -0.8154    -1.0806    -1.1488    -0.9049
+#>       2011-11-01 2011-12-01 2012-01-01 2012-02-01 2012-03-01 2012-04-01 2012-05-01 2012-06-01 2012-07-01 2012-08-01
+#> base     -1.0465     -0.923    -0.4052    -0.6154     0.1469     0.7347     -0.165          1    -0.3004     0.8927
+#> terra    -1.0465     -0.923    -0.4052    -0.6154     0.1469     0.7347     -0.165          1    -0.3004     0.8927
+#>       2012-09-01 2012-10-01 2012-11-01 2012-12-01 2013-01-01 2013-02-01 2013-03-01 2013-04-01 2013-05-01 2013-06-01
+#> base      0.6757    -0.1687     0.1006    -0.1393      1.139     1.1538     0.9184     0.4041     1.0722         -1
+#> terra     0.6757    -0.1687     0.1006    -0.1393      1.139     1.1538     0.9184     0.4041     1.0722         -1
+#>       2013-07-01 2013-08-01 2013-09-01 2013-10-01 2013-11-01 2013-12-01 2014-01-01 2014-02-01 2014-03-01 2014-04-01
+#> base      1.1158     0.1879      0.473     1.0736     0.9459     1.0624     1.4019     2.0619     1.5245     1.6715
+#> terra     1.1158     0.1879      0.473     1.0736     0.9459     1.0624     1.4019     2.0619     1.5245     1.6715
+#>       2014-05-01 2014-06-01 2014-07-01 2014-08-01 2014-09-01 2014-10-01 2014-11-01 2014-12-01
+#> base      3.5466         12     2.6607     2.4432      1.419     1.2577     1.9119      2.264
+#> terra     3.5466         12     2.6607     2.4432      1.419     1.2577     1.9119      2.264
+all.equal(as.numeric(t90_base), as.numeric(t90_terra), tolerance = 1e-6)
+#> [1] TRUE
+```
+
+On real, large data the two would differ only in memory footprint and
+runtime, not in the values returned.
+
+## Via `calculate_aci()`
+
+Rather than swapping individual functions, pass `engine = "terra"` to
+[`calculate_aci()`](../reference/calculate_aci.md) directly — everything
+else about the call stays the same (see
+[`vignette("xaci-full-pipeline")`](../articles/xaci-full-pipeline.md)
+for the base-engine version of this call):
+
+``` r
+
+results_dir <- tools::R_user_dir("xaci", which = "data")
+
+calculate_aci(
+  country_abbrev      = "FRA",
+  study_period         = c("2000-01-01", "2024-12-31"),
+  reference_period      = c("2000-01-01", "2012-12-31"),
+  years                  = 2000:2024,
+  granularity             = "month",
+  area                     = TRUE,
+  factor                   = 1 / 5,
+  admin_level               = NULL,
+  save                       = TRUE,
+  save_dir                   = results_dir,
+  computed_components         = FALSE,
+  engine                       = "terra",   # <- memory-safe loading & reduction
+  cores                         = 12         # <- forwarded to temperature_component_terra()
+)
+```
+
+`engine = "base"` (the default) reproduces the original behaviour
+exactly. Cached `.rds` files are named identically regardless of which
+engine produced them, so a later call with `computed_components = TRUE`
+reloads them the same way either way.
+
+## The `cores` argument
+
+`cores` is only meaningful for `engine = "terra"`, and only affects
+[`temperature_component_terra()`](../reference/temperature_component_terra.md):
+its rolling-percentile step
+([`terra::roll()`](https://rspatial.github.io/terra/reference/roll.html),
+via
+[`calculate_percentiles_terra()`](../reference/calculate_percentiles_terra.md))
+is by far the most expensive part of the terra pipeline and has no
+native parallelisation, so `cores` controls a manual chunked-parallel
+implementation instead. It is silently ignored when `engine = "base"`
+(the base
+[`temperature_component()`](../reference/temperature_component.md) has
+no such parameter, so [`calculate_aci()`](../reference/calculate_aci.md)
+only forwards `cores` when `engine = "terra"`).

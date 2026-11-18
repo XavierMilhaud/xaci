@@ -215,6 +215,12 @@ load_component_terra <- function(data_path, var_name, mask_path = NULL,
 #'   default \code{1} -- lower it further if you still see
 #'   \code{mem.maxVSize()}/OOM crashes on your machine; raise it (fewer,
 #'   larger chunks, faster overall) only if you have RAM headroom to spare.
+#'   The number of chunks is capped at 500 (see \code{max_chunks} in the
+#'   source): every chunk is an intermediate file that must be opened
+#'   simultaneously when the chunks are recombined, and many systems
+#'   (e.g. Linux, soft limit of 1024 open files per process) fail beyond
+#'   that. For a very large input, the effective chunk size can therefore
+#'   exceed \code{target_chunk_gb}.
 #' @return A \code{terra::SpatRaster} with one layer per day.
 #' @export
 #' @importFrom terra time tapp nlyr ncell rast writeRaster
@@ -237,7 +243,12 @@ resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb
 
   total_gb    <- (as.numeric(terra::ncell(r)) * terra::nlyr(r) * 8) / 1024^3
   n_days      <- length(day_levels)
-  n_chunks    <- min(max(1L, ceiling(total_gb / target_chunk_gb)), n_days)
+  # Plafond du nombre de blocs : chaque bloc est un fichier .tif temporaire, et
+  # terra::rast(tmp_files) puis ifel() les ouvrent TOUS simultanement. Sous
+  # Linux la limite souple habituelle est de 1024 fichiers ouverts par
+  # processus ("cannot open N files") ; on reste largement en dessous.
+  max_chunks  <- 500L
+  n_chunks    <- min(max(1L, ceiling(total_gb / target_chunk_gb)), n_days, max_chunks)
 
   if (n_chunks <= 1L) {
     out <- terra::tapp(r, index = day_idx, fun = fun_narm, filename = "")

@@ -11,6 +11,7 @@ Colour
 DEFAUT
 DJF
 EPSG
+Eq
 GADM
 GDAL
 Garrido
@@ -156,6 +157,7 @@ l'est
 l'invariance
 l'objet
 l'ordre
+labelling
 le
 les
 liee
@@ -235,6 +237,7 @@ sont
 soumis
 spatialement
 standardisation
+standardise
 standardised
 standardises
 standardising

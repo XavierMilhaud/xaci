@@ -20,7 +20,13 @@ resample_daily_terra(r, fun = "mean", filename = "", target_chunk_gb = 1)
 to decide how many chunks are needed for memory safety. Conservative
 default \code{1} -- lower it further if you still see
 \code{mem.maxVSize()}/OOM crashes on your machine; raise it (fewer,
-larger chunks, faster overall) only if you have RAM headroom to spare.}
+larger chunks, faster overall) only if you have RAM headroom to spare.
+The number of chunks is capped at 500 (see \code{max_chunks} in the
+source): every chunk is an intermediate file that must be opened
+simultaneously when the chunks are recombined, and many systems
+(e.g. Linux, soft limit of 1024 open files per process) fail beyond
+that. For a very large input, the effective chunk size can therefore
+exceed \code{target_chunk_gb}.}
 }
 \value{
 A \code{terra::SpatRaster} with one layer per day.

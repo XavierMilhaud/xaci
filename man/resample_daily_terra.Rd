@@ -4,7 +4,14 @@
 \alias{resample_daily_terra}
 \title{Resample a SpatRaster to daily resolution (terra version)}
 \usage{
-resample_daily_terra(r, fun = "mean", filename = "", target_chunk_gb = 1)
+resample_daily_terra(
+  r,
+  fun = "mean",
+  filename = "",
+  target_chunk_gb = 1,
+  transform = NULL,
+  max_layers_per_chunk = 60000L
+)
 }
 \arguments{
 \item{r}{A \code{terra::SpatRaster} with \code{terra::time()} set
@@ -27,6 +34,28 @@ simultaneously when the chunks are recombined, and many systems
 (e.g. Linux, soft limit of 1024 open files per process) fail beyond
 that. For a very large input, the effective chunk size can therefore
 exceed \code{target_chunk_gb}.}
+
+\item{transform}{Optional function \code{function(x, keep)} applied, BLOCK
+BY BLOCK, to the hourly layers of each temporal chunk BEFORE the daily
+reduction (internal use, e.g. wind speed from u10/v10). \code{x} is the
+chunk of \code{r} (a \code{SpatRaster}), and \code{keep} the logical
+vector (length \code{nlyr(r)}) selecting its layers in \code{r}, so that
+a second raster can be sliced the same way (\code{v[[keep]]}). It must
+return a \code{SpatRaster} with the same number of layers as \code{x}.
+This exists because any raster arithmetic (\code{^}, \code{+},
+\code{sqrt}, ...) applied to a series of more than 65535 layers fails
+with \dQuote{cannot write more than 65535 layers} as soon as terra decides
+to write the result to a temporary GeoTIFF (i.e. when it does not fit in
+memory), so such arithmetic must never be run on the full hourly series.
+While \code{transform} runs, terra's default output data type is
+temporarily set to \code{"FLT8S"} (double precision) so that temporary
+files do not round intermediate results to 32 bits.
+Default \code{NULL} (no transformation).}
+
+\item{max_layers_per_chunk}{Maximum number of hourly layers per temporal
+chunk when \code{transform} is used, kept below the 65535-layer limit of
+GeoTIFF/terra. Default \code{60000}. Ignored when \code{transform} is
+\code{NULL}.}
 }
 \value{
 A \code{terra::SpatRaster} with one layer per day.

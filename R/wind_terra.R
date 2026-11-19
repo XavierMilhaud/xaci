@@ -38,14 +38,26 @@ wind_power_terra <- function(u10_r, v10_r, reference_period = NULL,
   # la vitesse instantanee (scalaire, sqrt(u^2+v^2)) est calculee AVANT la
   # reduction journaliere, et non apres (ce qui sous-estimait systematiquement
   # la vitesse moyenne journaliere des que la direction du vent variait dans
-  # la journee -- "moyenne vectorielle"). L'algebre de raster de terra (^, +,
-  # sqrt) traite les couches par blocs nativement et preserve terra::time(),
-  # donc ce calcul sur les donnees horaires BRUTES reste memory-safe sans
-  # mecanisme supplementaire ; seule la REDUCTION temporelle (horaire ->
-  # journaliere) necessite le chunking explicite de resample_daily_terra().
-  ws_hourly_r <- sqrt(u10_r^2 + v10_r^2)
-  ws_daily_r  <- resample_daily_terra(ws_hourly_r, fun = "mean",
-                                      target_chunk_gb = target_chunk_gb)
+  # la journee -- "moyenne vectorielle").
+  #
+  # ATTENTION : ce calcul NE doit PAS etre fait d'un seul bloc sur la serie
+  # horaire complete (ex. sqrt(u10_r^2 + v10_r^2)) : l'algebre de raster de
+  # terra ecrit son resultat dans un GeoTIFF temporaire des qu'il ne tient
+  # pas en memoire, et GeoTIFF est limite a 65535 couches -> erreur "[^]
+  # cannot write more than 65535 layers" sur ~300000+ couches horaires
+  # (meme limite que celle documentee pour terra::mask() et pour la
+  # conversion Kelvin -> Celsius de temperature_component_terra()). Le calcul
+  # de la vitesse est donc passe a resample_daily_terra() via `transform`, qui
+  # l'applique bloc de jours par bloc (< 65535 couches chacun), juste avant la
+  # reduction journaliere du meme bloc.
+  if (terra::nlyr(u10_r) != terra::nlyr(v10_r)) {
+    stop("wind_power_terra(): u10_r and v10_r must have the same number of ",
+         "layers (", terra::nlyr(u10_r), " vs ", terra::nlyr(v10_r), ").")
+  }
+  ws_daily_r <- resample_daily_terra(
+    u10_r, fun = "mean", target_chunk_gb = target_chunk_gb,
+    transform = function(u, keep) sqrt(u^2 + v10_r[[keep]]^2)
+  )
 
   wp_r <- 0.5 * rho * ws_daily_r^3
 

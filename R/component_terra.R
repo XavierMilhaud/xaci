@@ -221,10 +221,31 @@ load_component_terra <- function(data_path, var_name, mask_path = NULL,
 #'   (e.g. Linux, soft limit of 1024 open files per process) fail beyond
 #'   that. For a very large input, the effective chunk size can therefore
 #'   exceed \code{target_chunk_gb}.
+#' @param transform Optional function \code{function(x, keep)} applied, BLOCK
+#'   BY BLOCK, to the hourly layers of each temporal chunk BEFORE the daily
+#'   reduction (internal use, e.g. wind speed from u10/v10). \code{x} is the
+#'   chunk of \code{r} (a \code{SpatRaster}), and \code{keep} the logical
+#'   vector (length \code{nlyr(r)}) selecting its layers in \code{r}, so that
+#'   a second raster can be sliced the same way (\code{v[[keep]]}). It must
+#'   return a \code{SpatRaster} with the same number of layers as \code{x}.
+#'   This exists because any raster arithmetic (\code{^}, \code{+},
+#'   \code{sqrt}, ...) applied to a series of more than 65535 layers fails
+#'   with \dQuote{cannot write more than 65535 layers} as soon as terra decides
+#'   to write the result to a temporary GeoTIFF (i.e. when it does not fit in
+#'   memory), so such arithmetic must never be run on the full hourly series.
+#'   While \code{transform} runs, terra's default output data type is
+#'   temporarily set to \code{"FLT8S"} (double precision) so that temporary
+#'   files do not round intermediate results to 32 bits.
+#'   Default \code{NULL} (no transformation).
+#' @param max_layers_per_chunk Maximum number of hourly layers per temporal
+#'   chunk when \code{transform} is used, kept below the 65535-layer limit of
+#'   GeoTIFF/terra. Default \code{60000}. Ignored when \code{transform} is
+#'   \code{NULL}.
 #' @return A \code{terra::SpatRaster} with one layer per day.
 #' @export
 #' @importFrom terra time tapp nlyr ncell rast writeRaster
-resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb = 1) {
+resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb = 1,
+                                 transform = NULL, max_layers_per_chunk = 60000L) {
   day_key    <- format(terra::time(r), "%Y-%m-%d")
   day_levels <- unique(day_key)              # ordre chronologique (r est trie par temps)
   day_idx    <- factor(day_key, levels = day_levels)
@@ -241,6 +262,21 @@ resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb
   # -> NA ci-dessous -- purement du bruit puisque ce cas est deja gere.
   fun_narm <- function(x, ...) suppressWarnings(base_fun(x, na.rm = TRUE))
 
+  # Avec `transform`, l'algebre de raster (^, +, sqrt, ...) peut ecrire ses
+  # resultats intermediaires dans des GeoTIFF temporaires, en FLOAT32 par
+  # defaut (terraOptions(datatype = "FLT4S")) -- ce qui arrondirait chaque
+  # etape a ~6e-8 pres (relatif) et romprait l'invariance du resultat par
+  # rapport au calcul en RAM (double precision). Ces operateurs n'acceptant
+  # pas d'argument `wopt`, on force la double precision via l'option globale
+  # de terra, le temps de l'appel (restauree a la sortie, meme en cas d'erreur).
+  if (!is.null(transform)) {
+    old_dt <- tryCatch(terra::terraOptions(print = FALSE)$datatype,
+                       error = function(e) NULL)
+    if (is.null(old_dt) || length(old_dt) != 1L || !nzchar(old_dt)) old_dt <- "FLT4S"
+    terra::terraOptions(datatype = "FLT8S")
+    on.exit(terra::terraOptions(datatype = old_dt), add = TRUE)
+  }
+
   total_gb    <- (as.numeric(terra::ncell(r)) * terra::nlyr(r) * 8) / 1024^3
   n_days      <- length(day_levels)
   # Plafond du nombre de blocs : chaque bloc est un fichier .tif temporaire, et
@@ -248,10 +284,18 @@ resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb
   # Linux la limite souple habituelle est de 1024 fichiers ouverts par
   # processus ("cannot open N files") ; on reste largement en dessous.
   max_chunks  <- 500L
-  n_chunks    <- min(max(1L, ceiling(total_gb / target_chunk_gb)), n_days, max_chunks)
+  n_chunks_mem <- max(1L, ceiling(total_gb / target_chunk_gb))
+  # Avec `transform`, de l'algebre de raster est appliquee a CHAQUE bloc : il
+  # faut alors que chaque bloc reste sous la limite de 65535 couches de terra
+  # (sinon "cannot write more than 65535 layers" des que terra ecrit le
+  # resultat intermediaire sur disque), independamment de la taille en Go.
+  n_chunks_lyr <- if (is.null(transform)) 1L else
+    max(1L, ceiling(terra::nlyr(r) / max_layers_per_chunk))
+  n_chunks    <- min(max(n_chunks_mem, n_chunks_lyr), n_days, max_chunks)
 
   if (n_chunks <= 1L) {
-    out <- terra::tapp(r, index = day_idx, fun = fun_narm, filename = "")
+    r_in <- if (is.null(transform)) r else transform(r, rep(TRUE, terra::nlyr(r)))
+    out <- terra::tapp(r_in, index = day_idx, fun = fun_narm, filename = "")
   } else {
     message(sprintf(
       "[resample_daily_terra] %d couches (~%.2f Go), decoupe en %d bloc(s) temporel(s) de jours consecutifs pour plafonner le pic memoire.",
@@ -270,7 +314,9 @@ resample_daily_terra <- function(r, fun = "mean", filename = "", target_chunk_gb
       sub_idx <- factor(day_key[keep], levels = d_sel)
 
       tmp_files[i] <- file.path(tmp_dir, sprintf("chunk_%04d.tif", i))
-      terra::tapp(r[[keep]], index = sub_idx, fun = fun_narm,
+      r_chunk <- r[[keep]]
+      if (!is.null(transform)) r_chunk <- transform(r_chunk, keep)
+      terra::tapp(r_chunk, index = sub_idx, fun = fun_narm,
                   filename = tmp_files[i], overwrite = TRUE,
                   wopt = list(filetype = "GTiff", gdal = c("BIGTIFF=YES"),
                               datatype = "FLT8S"))
